@@ -27,26 +27,40 @@ export class InsufficientStockError extends Error {
  *  movement atomically). SQLite/better-sqlite3 doesn't support nested
  *  BEGINs, so this must not open its own transaction when one is already
  *  active on the connection. */
+/** Under a single-till SQLite install this read-then-write never raced,
+ *  because SQLite serializes all writers. Under a multi-till Postgres
+ *  server, two tills selling the last unit of the same book concurrently
+ *  could both read stock_qty=1, both compute newQty=0, and both succeed —
+ *  overselling by one unit. Fixed as a single guarded atomic UPDATE: the
+ *  WHERE clause re-checks stock_qty at the moment of the write (under the
+ *  row lock the UPDATE itself takes), not from a possibly-stale read, so a
+ *  concurrent decrement below zero can never both "succeed". */
 export async function adjustStockWithTrx(
   trx: Transaction<Database>,
   input: AdjustStockInput
 ): Promise<void> {
-  const book = await trx
-    .selectFrom('books')
-    .select(['id', 'stock_qty'])
+  let query = trx
+    .updateTable('books')
+    .set((eb) => ({
+      stock_qty: eb('stock_qty', '+', input.changeQty),
+      updated_at: new Date().toISOString()
+    }))
     .where('id', '=', input.bookId)
-    .executeTakeFirstOrThrow()
 
-  const newQty = book.stock_qty + input.changeQty
-  if (newQty < 0 && !input.allowNegative) {
+  if (!input.allowNegative) {
+    query = query.where('stock_qty', '>=', -input.changeQty)
+  }
+
+  const updated = await query.returning(['stock_qty']).executeTakeFirst()
+  if (!updated) {
+    // The guard above failed — current stock can't cover this deduction.
+    // (A nonexistent bookId would also land here, but every caller already
+    // works from a bookId it just read from this same table.)
     throw new InsufficientStockError(input.bookId)
   }
 
-  await trx
-    .updateTable('books')
-    .set({ stock_qty: newQty, updated_at: new Date().toISOString() })
-    .where('id', '=', input.bookId)
-    .execute()
+  const afterQty = updated.stock_qty
+  const beforeQty = afterQty - input.changeQty
 
   await trx
     .insertInto('stock_movements')
@@ -66,8 +80,8 @@ export async function adjustStockWithTrx(
     action: 'update',
     entityType: 'books',
     entityId: input.bookId,
-    before: { stock_qty: book.stock_qty },
-    after: { stock_qty: newQty }
+    before: { stock_qty: beforeQty },
+    after: { stock_qty: afterQty }
   })
 }
 

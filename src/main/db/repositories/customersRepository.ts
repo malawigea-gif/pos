@@ -118,19 +118,18 @@ export interface RecordCreditPaymentInput {
   userId: number | null
 }
 
-/** A customer paying down what they owe on their credit account. */
+/** A customer paying down what they owe on their credit account. Uses a
+ *  single atomic UPDATE (see adjustStockWithTrx's comment in
+ *  stockRepository.ts for why a read-then-write here would race under
+ *  multi-till Postgres) rather than reading credit_balance first. */
 export async function recordCreditPayment(db: Kysely<Database>, input: RecordCreditPaymentInput) {
   return db.transaction().execute(async (trx) => {
-    const customer = await trx
-      .selectFrom('customers')
-      .selectAll()
-      .where('id', '=', input.customerId)
-      .executeTakeFirstOrThrow()
-
-    const newBalance = customer.credit_balance - input.amount
     const updated = await trx
       .updateTable('customers')
-      .set({ credit_balance: newBalance, updated_at: new Date().toISOString() })
+      .set((eb) => ({
+        credit_balance: eb('credit_balance', '-', input.amount),
+        updated_at: new Date().toISOString()
+      }))
       .where('id', '=', input.customerId)
       .returningAll()
       .executeTakeFirstOrThrow()
@@ -140,8 +139,8 @@ export async function recordCreditPayment(db: Kysely<Database>, input: RecordCre
       action: 'update',
       entityType: 'customers',
       entityId: input.customerId,
-      before: { credit_balance: customer.credit_balance },
-      after: { credit_balance: newBalance }
+      before: { credit_balance: updated.credit_balance + input.amount },
+      after: { credit_balance: updated.credit_balance }
     })
 
     return updated
@@ -157,27 +156,39 @@ export interface AdjustLoyaltyPointsInput {
 }
 
 /** Core logic, reusable by callers that already hold an open transaction
- *  (checkoutSale accrues points as part of the same atomic checkout). */
+ *  (checkoutSale accrues points as part of the same atomic checkout). A
+ *  single guarded atomic UPDATE, not read-then-write (see
+ *  adjustStockWithTrx's comment in stockRepository.ts) — the WHERE guard
+ *  only ever matters when pointsChange is negative (redeeming); it's always
+ *  true for a positive pointsChange (earning), matching the original
+ *  behavior exactly. */
 export async function adjustLoyaltyPointsWithTrx(
   trx: Transaction<Database>,
   input: AdjustLoyaltyPointsInput
 ): Promise<number> {
-  const customer = await trx
-    .selectFrom('customers')
-    .select(['id', 'loyalty_points'])
+  const updated = await trx
+    .updateTable('customers')
+    .set((eb) => ({
+      loyalty_points: eb('loyalty_points', '+', input.pointsChange),
+      updated_at: new Date().toISOString()
+    }))
     .where('id', '=', input.customerId)
-    .executeTakeFirstOrThrow()
+    .where('loyalty_points', '>=', -input.pointsChange)
+    .returning(['loyalty_points'])
+    .executeTakeFirst()
 
-  const newPoints = customer.loyalty_points + input.pointsChange
-  if (newPoints < 0) {
-    throw new InsufficientLoyaltyPointsError(input.customerId, customer.loyalty_points, -input.pointsChange)
+  if (!updated) {
+    // The guard failed (redeeming more points than currently available) —
+    // re-read only for a precise error message, not to decide the outcome.
+    const current = await trx
+      .selectFrom('customers')
+      .select('loyalty_points')
+      .where('id', '=', input.customerId)
+      .executeTakeFirstOrThrow()
+    throw new InsufficientLoyaltyPointsError(input.customerId, current.loyalty_points, -input.pointsChange)
   }
 
-  await trx
-    .updateTable('customers')
-    .set({ loyalty_points: newPoints, updated_at: new Date().toISOString() })
-    .where('id', '=', input.customerId)
-    .execute()
+  const newPoints = updated.loyalty_points
 
   await trx
     .insertInto('loyalty_transactions')
@@ -194,7 +205,7 @@ export async function adjustLoyaltyPointsWithTrx(
     action: 'update',
     entityType: 'customers',
     entityId: input.customerId,
-    before: { loyalty_points: customer.loyalty_points },
+    before: { loyalty_points: newPoints - input.pointsChange },
     after: { loyalty_points: newPoints }
   })
 

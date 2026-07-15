@@ -187,24 +187,27 @@ async function finalizeReturnWithTrx(
     const payments = await trx.selectFrom('sale_payments').selectAll().where('sale_id', '=', sale.id).execute()
     const paidViaCreditOnly = payments.length > 0 && payments.every((p) => p.method === 'credit')
     if (paidViaCreditOnly) {
-      const customer = await trx
-        .selectFrom('customers')
-        .selectAll()
-        .where('id', '=', sale.customer_id)
-        .executeTakeFirstOrThrow()
-      const newBalance = customer.credit_balance - returnRow.refund_total
-      await trx
+      // Atomic guarded UPDATE, not read-then-write — see adjustStockWithTrx's
+      // comment in stockRepository.ts for why that matters under multi-till
+      // Postgres. No lower-bound guard, matching the original's behavior:
+      // a refund can legitimately push a credit balance negative.
+      const updated = await trx
         .updateTable('customers')
-        .set({ credit_balance: newBalance, updated_at: new Date().toISOString() })
+        .set((eb) => ({
+          credit_balance: eb('credit_balance', '-', returnRow.refund_total),
+          updated_at: new Date().toISOString()
+        }))
         .where('id', '=', sale.customer_id)
-        .execute()
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
       await recordAudit(trx, {
         userId: actingUserId,
         action: 'update',
         entityType: 'customers',
         entityId: sale.customer_id,
-        before: { credit_balance: customer.credit_balance },
-        after: { credit_balance: newBalance }
+        before: { credit_balance: updated.credit_balance + returnRow.refund_total },
+        after: { credit_balance: updated.credit_balance }
       })
     }
   }

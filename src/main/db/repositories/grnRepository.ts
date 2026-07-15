@@ -76,15 +76,12 @@ export async function createGrn(db: Kysely<Database>, input: CreateGrnInput) {
       })
     }
 
-    const supplier = await trx
-      .selectFrom('suppliers')
-      .select(['id', 'balance'])
-      .where('id', '=', input.supplierId)
-      .executeTakeFirstOrThrow()
-    const newBalance = supplier.balance + total
+    // Atomic guarded UPDATE, not read-then-write — see adjustStockWithTrx's
+    // comment in stockRepository.ts for why that matters under multi-till
+    // Postgres (two tills receiving GRNs for the same supplier concurrently).
     await trx
       .updateTable('suppliers')
-      .set({ balance: newBalance, updated_at: new Date().toISOString() })
+      .set((eb) => ({ balance: eb('balance', '+', total), updated_at: new Date().toISOString() }))
       .where('id', '=', input.supplierId)
       .execute()
 

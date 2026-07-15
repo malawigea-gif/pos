@@ -35,24 +35,22 @@ export async function createSupplierPayment(db: Kysely<Database>, input: CreateS
       .executeTakeFirstOrThrow()
 
     if (paidDate) {
-      const supplier = await trx
-        .selectFrom('suppliers')
-        .select(['id', 'balance'])
-        .where('id', '=', input.supplierId)
-        .executeTakeFirstOrThrow()
-      const newBalance = supplier.balance - input.amount
-      await trx
+      // Atomic guarded UPDATE, not read-then-write — see adjustStockWithTrx's
+      // comment in stockRepository.ts for why that matters under multi-till
+      // Postgres.
+      const updated = await trx
         .updateTable('suppliers')
-        .set({ balance: newBalance, updated_at: new Date().toISOString() })
+        .set((eb) => ({ balance: eb('balance', '-', input.amount), updated_at: new Date().toISOString() }))
         .where('id', '=', input.supplierId)
-        .execute()
+        .returningAll()
+        .executeTakeFirstOrThrow()
       await recordAudit(trx, {
         userId: input.userId,
         action: 'update',
         entityType: 'suppliers',
         entityId: input.supplierId,
-        before: { balance: supplier.balance },
-        after: { balance: newBalance }
+        before: { balance: updated.balance + input.amount },
+        after: { balance: updated.balance }
       })
     }
 
@@ -90,15 +88,12 @@ export async function markSupplierPaymentPaid(
       .returningAll()
       .executeTakeFirstOrThrow()
 
-    const supplier = await trx
-      .selectFrom('suppliers')
-      .select(['id', 'balance'])
-      .where('id', '=', payment.supplier_id)
-      .executeTakeFirstOrThrow()
-    const newBalance = supplier.balance - payment.amount
+    // Atomic guarded UPDATE, not read-then-write — see adjustStockWithTrx's
+    // comment in stockRepository.ts for why that matters under multi-till
+    // Postgres.
     await trx
       .updateTable('suppliers')
-      .set({ balance: newBalance, updated_at: new Date().toISOString() })
+      .set((eb) => ({ balance: eb('balance', '-', payment.amount), updated_at: new Date().toISOString() }))
       .where('id', '=', payment.supplier_id)
       .execute()
 

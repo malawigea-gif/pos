@@ -246,24 +246,40 @@ export async function checkoutSaleWithTrx(trx: Transaction<Database>, input: Che
         .executeTakeFirstOrThrow()
       if (!customer.is_credit_account) throw new CreditNotAllowedError(customerId)
 
-      const available = customer.credit_limit - customer.credit_balance
-      if (creditAmount > available) {
-        throw new InsufficientCreditError(customerId, available, creditAmount)
+      // The is_credit_account check above is a static-ish flag, not the
+      // race-sensitive part — the actual credit-limit check has to be an
+      // atomic guarded UPDATE (not read-then-write; see adjustStockWithTrx's
+      // comment in stockRepository.ts), since two tills charging the same
+      // customer's credit account concurrently could otherwise both read
+      // the same balance and both push it past the limit.
+      const updated = await trx
+        .updateTable('customers')
+        .set((eb) => ({
+          credit_balance: eb('credit_balance', '+', creditAmount),
+          updated_at: new Date().toISOString()
+        }))
+        .where('id', '=', customerId)
+        .where((eb) => eb('credit_balance', '<=', eb('credit_limit', '-', creditAmount)))
+        .returningAll()
+        .executeTakeFirst()
+
+      if (!updated) {
+        // The guard failed — re-read only for a precise error message.
+        const current = await trx
+          .selectFrom('customers')
+          .selectAll()
+          .where('id', '=', customerId)
+          .executeTakeFirstOrThrow()
+        throw new InsufficientCreditError(customerId, current.credit_limit - current.credit_balance, creditAmount)
       }
 
-      const newBalance = customer.credit_balance + creditAmount
-      await trx
-        .updateTable('customers')
-        .set({ credit_balance: newBalance, updated_at: new Date().toISOString() })
-        .where('id', '=', customerId)
-        .execute()
       await recordAudit(trx, {
         userId: input.userId,
         action: 'update',
         entityType: 'customers',
         entityId: customerId,
-        before: { credit_balance: customer.credit_balance },
-        after: { credit_balance: newBalance }
+        before: { credit_balance: updated.credit_balance - creditAmount },
+        after: { credit_balance: updated.credit_balance }
       })
     }
 
