@@ -2,7 +2,10 @@ import { Kysely, PostgresDialect, sql } from 'kysely'
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runMigrations } from '../../src/main/db/migrator'
+import { createIsolatedTestDatabase } from './pgTestDatabase'
 import type { Database } from '../../src/main/db/types'
+
+const TEST_DB_NAME = 'lankapos_test_migrations'
 
 // Opt-in only: this hits a real Postgres server, unlike every other test in
 // this project (which run against in-memory SQLite). Set TEST_POSTGRES_URL
@@ -24,14 +27,12 @@ describe.skipIf(!connectionString)('Postgres migration compatibility', () => {
   let pool: Pool
   let db: Kysely<Database>
 
+  // See postgresConcurrency.test.ts's beforeAll comment for why this needs
+  // a longer-than-default hook timeout.
   beforeAll(async () => {
-    pool = new Pool({ connectionString })
+    pool = await createIsolatedTestDatabase(connectionString!, TEST_DB_NAME)
     db = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) })
-    // Start from a clean slate so this is repeatable against a reused server,
-    // rather than requiring a freshly-created database every run.
-    await sql`DROP SCHEMA public CASCADE`.execute(db)
-    await sql`CREATE SCHEMA public`.execute(db)
-  })
+  }, 30000)
 
   afterAll(async () => {
     await db.destroy()
@@ -42,8 +43,13 @@ describe.skipIf(!connectionString)('Postgres migration compatibility', () => {
   })
 
   it('produces the same 28 tables as the SQLite path', async () => {
+    // kysely_migration/kysely_migration_lock are Kysely's own bookkeeping
+    // tables (tracking which migrations have run) — real, expected, and
+    // present under both dialects, just not part of this schema's own 28.
     const { rows } = await sql<{ table_name: string }>`
-      select table_name from information_schema.tables where table_schema = 'public'
+      select table_name from information_schema.tables
+      where table_schema = 'public'
+        and table_name not in ('kysely_migration', 'kysely_migration_lock')
     `.execute(db)
     const tableNames = rows.map((r) => r.table_name).sort()
     expect(tableNames).toHaveLength(28)
@@ -94,7 +100,7 @@ describe.skipIf(!connectionString)('Postgres migration compatibility', () => {
   it('stores money columns as double precision, matching SQLite REAL\'s 8-byte precision', async () => {
     const { rows } = await sql<{ data_type: string }>`
       select data_type from information_schema.columns
-      where table_name = 'books' and column_name = 'cost_price'
+      where table_schema = 'public' and table_name = 'books' and column_name = 'cost_price'
     `.execute(db)
     expect(rows[0]?.data_type).toBe('double precision')
   })

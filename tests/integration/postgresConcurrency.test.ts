@@ -1,10 +1,13 @@
-import { Kysely, PostgresDialect, sql } from 'kysely'
+import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runMigrations } from '../../src/main/db/migrator'
 import { createBook } from '../../src/main/db/repositories/booksRepository'
 import { adjustStock, InsufficientStockError } from '../../src/main/db/repositories/stockRepository'
+import { createIsolatedTestDatabase } from './pgTestDatabase'
 import type { Database } from '../../src/main/db/types'
+
+const TEST_DB_NAME = 'lankapos_test_concurrency'
 
 // Opt-in only, same convention as postgresMigrations.test.ts — set
 // TEST_POSTGRES_URL to run this against a real server. This is the one
@@ -28,13 +31,16 @@ describe.skipIf(!connectionString)('multi-till concurrency: stock deduction', ()
   let pool: Pool
   let db: Kysely<Database>
 
+  // Real Postgres round trips (DROP/CREATE DATABASE + a full migration run)
+  // are inherently slower and more contention-prone than in-memory SQLite —
+  // the default 10s hook timeout is comfortable running this file alone but
+  // too tight running the entire suite (all SQLite tests + all three
+  // Postgres integration files) at once on a loaded machine.
   beforeAll(async () => {
-    pool = new Pool({ connectionString })
+    pool = await createIsolatedTestDatabase(connectionString!, TEST_DB_NAME)
     db = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) })
-    await sql`DROP SCHEMA public CASCADE`.execute(db)
-    await sql`CREATE SCHEMA public`.execute(db)
     await runMigrations(db)
-  })
+  }, 30000)
 
   afterAll(async () => {
     await db.destroy()

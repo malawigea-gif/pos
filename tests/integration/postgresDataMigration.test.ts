@@ -1,9 +1,9 @@
 import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { Kysely, PostgresDialect, sql } from 'kysely'
+import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runMigrations } from '../../src/main/db/migrator'
 import { createDatabase } from '../../src/main/db/client'
 import { seedDefaultAdmin, seedDefaultTaxRate, getSeededAdminUserId } from '../../src/main/db/seed'
@@ -14,7 +14,10 @@ import {
   DestinationNotEmptyError,
   migrateSqliteToPostgres
 } from '../../src/main/migration/sqliteToPostgresMigration'
+import { createIsolatedTestDatabase } from './pgTestDatabase'
 import type { Database } from '../../src/main/db/types'
+
+const TEST_DB_NAME = 'lankapos_test_data_migration'
 
 // Opt-in only, same convention as the other tests/integration/*.test.ts
 // files — set TEST_POSTGRES_URL to run this against a real server. This
@@ -40,29 +43,25 @@ describe.skipIf(!connectionString)('SQLite -> Postgres data migration', () => {
   let tempDir: string
   let sourcePath: string
 
-  beforeAll(async () => {
-    pool = new Pool({ connectionString })
-    destDb = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) })
-  })
-
-  afterAll(async () => {
-    await destDb.destroy()
-  })
-
+  // See postgresConcurrency.test.ts's beforeAll comment for why this needs
+  // a longer-than-default hook timeout — this one recreates a whole
+  // database per test (beforeEach, not beforeAll), so it pays that cost
+  // more often than the other two files.
   beforeEach(async () => {
-    // Fresh destination for every test, so "already has data" from one test
-    // can't leak into the next.
-    await sql`DROP SCHEMA public CASCADE`.execute(destDb)
-    await sql`CREATE SCHEMA public`.execute(destDb)
+    // Fresh destination database for every test, so "already has data" from
+    // one test can't leak into the next.
+    pool = await createIsolatedTestDatabase(connectionString!, TEST_DB_NAME)
+    destDb = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) })
     await runMigrations(destDb)
     await seedDefaultAdmin(destDb)
     await seedDefaultTaxRate(destDb)
 
     tempDir = await mkdtemp(join(tmpdir(), 'lankapos-migration-test-'))
     sourcePath = join(tempDir, 'source.db')
-  })
+  }, 30000)
 
   afterEach(async () => {
+    await destDb.destroy()
     await rm(tempDir, { recursive: true, force: true })
   })
 
