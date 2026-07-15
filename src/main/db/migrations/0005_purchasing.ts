@@ -1,18 +1,17 @@
 import { sql, type Kysely } from 'kysely'
+import { addIdColumn, currentTimestampDefault } from './dialectHelpers'
 
 export async function up(db: Kysely<unknown>): Promise<void> {
-  await db.schema
-    .createTable('purchase_orders')
-    .addColumn('id', 'integer', (c) => c.primaryKey().autoIncrement())
+  await addIdColumn(db.schema.createTable('purchase_orders'), db)
     .addColumn('po_no', 'text', (c) => c.notNull().unique())
     .addColumn('supplier_id', 'integer', (c) => c.notNull().references('suppliers.id'))
     .addColumn('status', 'text', (c) => c.notNull().defaultTo('draft'))
-    .addColumn('order_date', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
+    .addColumn('order_date', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
     .addColumn('expected_date', 'text')
     .addColumn('notes', 'text')
     .addColumn('created_by', 'integer', (c) => c.references('users.id'))
-    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
-    .addColumn('updated_at', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
+    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
+    .addColumn('updated_at', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
     .addCheckConstraint(
       'po_status_check',
       sql`status IN ('draft', 'sent', 'partially_received', 'received', 'cancelled')`
@@ -24,15 +23,13 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .column('supplier_id')
     .execute()
 
-  await db.schema
-    .createTable('purchase_order_items')
-    .addColumn('id', 'integer', (c) => c.primaryKey().autoIncrement())
+  await addIdColumn(db.schema.createTable('purchase_order_items'), db)
     .addColumn('purchase_order_id', 'integer', (c) =>
       c.notNull().references('purchase_orders.id').onDelete('cascade')
     )
     .addColumn('book_id', 'integer', (c) => c.notNull().references('books.id'))
     .addColumn('quantity', 'integer', (c) => c.notNull())
-    .addColumn('unit_cost', 'real', (c) => c.notNull())
+    .addColumn('unit_cost', 'double precision', (c) => c.notNull())
     .execute()
   await db.schema
     .createIndex('po_items_po_idx')
@@ -40,17 +37,15 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .column('purchase_order_id')
     .execute()
 
-  await db.schema
-    .createTable('goods_received_notes')
-    .addColumn('id', 'integer', (c) => c.primaryKey().autoIncrement())
+  await addIdColumn(db.schema.createTable('goods_received_notes'), db)
     .addColumn('grn_no', 'text', (c) => c.notNull().unique())
     .addColumn('purchase_order_id', 'integer', (c) => c.references('purchase_orders.id'))
     .addColumn('supplier_id', 'integer', (c) => c.notNull().references('suppliers.id'))
-    .addColumn('received_date', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
-    .addColumn('total', 'real', (c) => c.notNull().defaultTo(0))
+    .addColumn('received_date', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
+    .addColumn('total', 'double precision', (c) => c.notNull().defaultTo(0))
     .addColumn('received_by', 'integer', (c) => c.references('users.id'))
     .addColumn('notes', 'text')
-    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
+    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
     .execute()
   await db.schema
     .createIndex('grn_supplier_idx')
@@ -58,30 +53,26 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     .column('supplier_id')
     .execute()
 
-  await db.schema
-    .createTable('grn_items')
-    .addColumn('id', 'integer', (c) => c.primaryKey().autoIncrement())
+  await addIdColumn(db.schema.createTable('grn_items'), db)
     .addColumn('grn_id', 'integer', (c) =>
       c.notNull().references('goods_received_notes.id').onDelete('cascade')
     )
     .addColumn('book_id', 'integer', (c) => c.notNull().references('books.id'))
     .addColumn('quantity', 'integer', (c) => c.notNull())
-    .addColumn('unit_cost', 'real', (c) => c.notNull())
-    .addColumn('line_total', 'real', (c) => c.notNull())
+    .addColumn('unit_cost', 'double precision', (c) => c.notNull())
+    .addColumn('line_total', 'double precision', (c) => c.notNull())
     .execute()
   await db.schema.createIndex('grn_items_grn_idx').on('grn_items').column('grn_id').execute()
 
-  await db.schema
-    .createTable('supplier_payments')
-    .addColumn('id', 'integer', (c) => c.primaryKey().autoIncrement())
+  await addIdColumn(db.schema.createTable('supplier_payments'), db)
     .addColumn('supplier_id', 'integer', (c) => c.notNull().references('suppliers.id'))
-    .addColumn('amount', 'real', (c) => c.notNull())
+    .addColumn('amount', 'double precision', (c) => c.notNull())
     .addColumn('method', 'text')
     .addColumn('reference', 'text')
     .addColumn('due_date', 'text')
     .addColumn('paid_date', 'text')
     .addColumn('created_by', 'integer', (c) => c.references('users.id'))
-    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
+    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
     .execute()
   await db.schema
     .createIndex('supplier_payments_supplier_idx')

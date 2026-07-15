@@ -1,22 +1,21 @@
 import { sql, type Kysely } from 'kysely'
+import { addIdColumn, currentTimestampDefault } from './dialectHelpers'
 
 export async function up(db: Kysely<unknown>): Promise<void> {
-  await db.schema
-    .createTable('quotations')
-    .addColumn('id', 'integer', (c) => c.primaryKey().autoIncrement())
+  await addIdColumn(db.schema.createTable('quotations'), db)
     .addColumn('quote_no', 'text', (c) => c.notNull().unique())
     .addColumn('customer_id', 'integer', (c) => c.references('customers.id'))
     .addColumn('created_by', 'integer', (c) => c.notNull().references('users.id'))
     .addColumn('status', 'text', (c) => c.notNull().defaultTo('open'))
-    .addColumn('subtotal', 'real', (c) => c.notNull().defaultTo(0))
-    .addColumn('discount_total', 'real', (c) => c.notNull().defaultTo(0))
-    .addColumn('tax_total', 'real', (c) => c.notNull().defaultTo(0))
-    .addColumn('total', 'real', (c) => c.notNull().defaultTo(0))
+    .addColumn('subtotal', 'double precision', (c) => c.notNull().defaultTo(0))
+    .addColumn('discount_total', 'double precision', (c) => c.notNull().defaultTo(0))
+    .addColumn('tax_total', 'double precision', (c) => c.notNull().defaultTo(0))
+    .addColumn('total', 'double precision', (c) => c.notNull().defaultTo(0))
     .addColumn('valid_until', 'text')
     .addColumn('notes', 'text')
-    .addColumn('quote_date', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
-    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
-    .addColumn('updated_at', 'text', (c) => c.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
+    .addColumn('quote_date', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
+    .addColumn('created_at', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
+    .addColumn('updated_at', 'text', (c) => c.notNull().defaultTo(currentTimestampDefault(db)))
     .addCheckConstraint(
       'quotations_status_check',
       sql`status IN ('open', 'converted', 'expired', 'cancelled')`
@@ -26,16 +25,14 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await db.schema.createIndex('quotations_created_by_idx').on('quotations').column('created_by').execute()
   await db.schema.createIndex('quotations_date_idx').on('quotations').column('quote_date').execute()
 
-  await db.schema
-    .createTable('quotation_items')
-    .addColumn('id', 'integer', (c) => c.primaryKey().autoIncrement())
+  await addIdColumn(db.schema.createTable('quotation_items'), db)
     .addColumn('quotation_id', 'integer', (c) => c.notNull().references('quotations.id').onDelete('cascade'))
     .addColumn('book_id', 'integer', (c) => c.notNull().references('books.id'))
     .addColumn('quantity', 'integer', (c) => c.notNull())
-    .addColumn('unit_price', 'real', (c) => c.notNull())
-    .addColumn('discount_amount', 'real', (c) => c.notNull().defaultTo(0))
-    .addColumn('tax_amount', 'real', (c) => c.notNull().defaultTo(0))
-    .addColumn('line_total', 'real', (c) => c.notNull())
+    .addColumn('unit_price', 'double precision', (c) => c.notNull())
+    .addColumn('discount_amount', 'double precision', (c) => c.notNull().defaultTo(0))
+    .addColumn('tax_amount', 'double precision', (c) => c.notNull().defaultTo(0))
+    .addColumn('line_total', 'double precision', (c) => c.notNull())
     .execute()
   await db.schema
     .createIndex('quotation_items_quotation_idx')
