@@ -3,6 +3,11 @@
 Written for someone picking this project up cold. If you're new here, read this
 before touching code.
 
+> For current project state — what's verified vs. not, known environment
+> gotchas, and the outstanding punch list — see
+> [`docs/DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md). This file is the
+> architecture/conventions reference; that one is the working status snapshot.
+
 ## 1. What this project is
 
 LankaPOS (formerly "LankaPOS-bookshop") is a bilingual (English / Sinhala)

@@ -18,6 +18,11 @@ Node.js (main process). Bilingual UI (English / Sinhala) from the ground up. Run
 > [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) (or the Sinhala translation,
 > [`docs/USER_GUIDE.si.md`](docs/USER_GUIDE.si.md)) instead — how to use
 > each screen, aimed at cashiers, managers, and the admin, not developers.
+>
+> **Picking up mid-project, or need to know what's actually been verified vs.
+> not yet?** See [`docs/DEVELOPMENT_STATUS.md`](docs/DEVELOPMENT_STATUS.md) —
+> current state, verification status, known environment gotchas, and the
+> outstanding punch list before production go-live.
 
 ## Development
 
