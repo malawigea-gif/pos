@@ -1,0 +1,81 @@
+{
+  "name": "lankapos",
+  "version": "0.1.0",
+  "description": "Offline-first bilingual (English/Sinhala) Point of Sale system for a school stationery/equipment shop",
+  "main": "./out/main/index.js",
+  "author": "",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "cross-env ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
+    "build:win": "electron-vite build && electron-builder --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.lankapos.app",
+    "productName": "LankaPOS",
+    "directories": {
+      "output": "dist"
+    },
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LankaPOS"
+    }
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@fontsource/noto-sans-sinhala": "^5.2.5",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.11.1",
+    "exceljs": "^4.4.0",
+    "i18next": "^23.16.8",
+    "kysely": "^0.27.4",
+    "lucide-react": "^1.24.0",
+    "node-thermal-printer": "^4.4.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^15.1.4"
+  },
+  "optionalDependencies": {
+    "printer": "^0.5.2"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "cross-env": "^10.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

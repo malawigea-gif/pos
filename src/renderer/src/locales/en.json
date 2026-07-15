@@ -1,0 +1,784 @@
+{
+  "common": {
+    "appName": "LankaPOS",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "search": "Search",
+    "all": "All",
+    "yes": "Yes",
+    "no": "No",
+    "loading": "Loading...",
+    "actions": "Actions"
+  },
+  "topbar": {
+    "sales": "Sales",
+    "quotations": "Quotations",
+    "inventory": "Inventory",
+    "customers": "Customers",
+    "suppliers": "Suppliers",
+    "pricing": "Pricing",
+    "reports": "Reports",
+    "returns": "Returns",
+    "users": "Users",
+    "backup": "Backup & Recovery",
+    "auditLog": "Audit Log",
+    "settings": "Settings",
+    "language": "Language"
+  },
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "language": "Language",
+      "profile": "Profile Data"
+    },
+    "language": {
+      "label": "Application language",
+      "description": "Choose the language used throughout the app. This changes immediately and is remembered for your account.",
+      "english": "English",
+      "sinhala": "Sinhala (සිංහල)"
+    },
+    "profile": {
+      "businessName": "Business name",
+      "phone": "Telephone number(s)",
+      "email": "Email",
+      "address": "Address",
+      "save": "Save Profile",
+      "saved": "Business profile updated."
+    }
+  },
+  "errors": {
+    "INSUFFICIENT_STOCK": "Insufficient stock for this book",
+    "DUPLICATE_BARCODE": "This barcode is already used by another item",
+    "DUPLICATE_ISBN": "This ISBN is already used by another item",
+    "QUOTATION_NOT_FOUND": "This quotation could not be found",
+    "QUOTATION_NOT_OPEN": "This quotation has already been converted or cancelled",
+    "INCOMPLETE_STOCK_TAKE": "Every item needs a counted quantity before this stock take can complete",
+    "EMPTY_CART": "Add at least one item before completing the sale",
+    "SALE_NOT_HELD": "This sale is no longer held and can't be resumed",
+    "PAYMENT_MISMATCH": "The payment amount doesn't cover the total due",
+    "CREDIT_NOT_ALLOWED": "Select a customer with an active credit account to use credit as a payment method",
+    "INSUFFICIENT_CREDIT": "This customer doesn't have enough available credit for that amount",
+    "INSUFFICIENT_LOYALTY_POINTS": "This customer doesn't have enough loyalty points",
+    "EMPTY_RETURN": "Select at least one item to return",
+    "SALE_NOT_RETURNABLE": "This invoice isn't eligible for a return",
+    "RETURN_QTY_EXCEEDS_AVAILABLE": "That quantity exceeds what's still available to return for this item",
+    "RETURN_NOT_PENDING": "This return is no longer awaiting approval",
+    "USERNAME_TAKEN": "That username is already taken",
+    "INVALID_CREDENTIALS": "Incorrect username or password",
+    "USER_INACTIVE": "This account has been deactivated",
+    "NOT_AUTHENTICATED": "Please sign in to continue",
+    "SESSION_LOCKED": "The session is locked. Enter your password to continue.",
+    "FORBIDDEN": "You don't have permission to do that",
+    "INVALID_BACKUP_SETTINGS": "Check the backup settings and try again",
+    "INVALID_BACKUP_FILE": "That file doesn't look like a valid LankaPOS backup",
+    "UNKNOWN": "Something went wrong. Please try again."
+  },
+  "inventory": {
+    "title": "Inventory",
+    "tabs": {
+      "books": "Items",
+      "stockTake": "Stock Take"
+    },
+    "books": {
+      "searchPlaceholder": "Search by title, author, ISBN, or barcode",
+      "categoryFilter": "Category",
+      "addBook": "Add Item",
+      "editBook": "Edit Item",
+      "lowStock": "Low stock",
+      "inactive": "Inactive",
+      "adjustStock": "Adjust stock",
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "confirmDeactivate": "Remove \"{{title}}\" from the active catalog? It can be reactivated later.",
+      "noResults": "No items match your search.",
+      "table": {
+        "title": "Title",
+        "author": "Author",
+        "isbn": "ISBN",
+        "category": "Category",
+        "stock": "Stock",
+        "reorderLevel": "Reorder level",
+        "sellingPrice": "Selling price"
+      }
+    },
+    "form": {
+      "titleRequired": "Title is required.",
+      "title": "Title",
+      "author": "Author",
+      "publisher": "Publisher",
+      "brand": "Brand",
+      "isbn": "ISBN",
+      "barcode": "Barcode",
+      "category": "Category",
+      "categoryPlaceholder": "Select or type to create a category",
+      "language": "Item language",
+      "taxRate": "Tax rate",
+      "taxRateNone": "No tax rate",
+      "costPrice": "Cost price",
+      "sellingPrice": "Selling price",
+      "initialStockQty": "Initial stock quantity",
+      "reorderLevel": "Reorder level",
+      "shelfLocation": "Shelf location"
+    },
+    "stockAdjust": {
+      "title": "Adjust stock — {{title}}",
+      "currentStock": "Current stock: {{qty}}",
+      "quantityChange": "Quantity change",
+      "quantityChangeHint": "Use a positive number to add stock, negative to remove.",
+      "reason": "Reason",
+      "reasons": {
+        "adjustment": "Manual correction",
+        "write_off": "Damaged / write-off"
+      },
+      "notes": "Notes",
+      "submit": "Apply adjustment"
+    },
+    "stockTake": {
+      "start": "Start stock take",
+      "startForCategory": "Start for category",
+      "noActive": "No stock take in progress.",
+      "inProgress": "Stock take in progress since {{date}}",
+      "table": {
+        "book": "Item",
+        "expected": "Expected",
+        "counted": "Counted",
+        "variance": "Variance"
+      },
+      "complete": "Complete stock take",
+      "confirmComplete": "Complete this stock take? Stock levels will be corrected to match the counted quantities.",
+      "completedSummary": "Stock take completed. {{count}} item(s) had their stock corrected."
+    }
+  },
+  "sales": {
+    "title": "Point of Sale",
+    "tabs": {
+      "sale": "Sale",
+      "registerClosing": "Register Closing"
+    },
+    "cart": {
+      "searchPlaceholder": "Scan barcode or search by title, author, ISBN",
+      "empty": "Cart is empty. Scan or search to add items.",
+      "table": {
+        "item": "Item",
+        "qty": "Qty",
+        "price": "Price",
+        "total": "Total",
+        "remove": "Remove"
+      },
+      "subtotal": "Subtotal",
+      "total": "Total",
+      "hold": "Hold Sale",
+      "checkout": "Checkout",
+      "resumeHeld": "Resume Held Sale",
+      "heldCleared": "Held sale parked. Cart is now empty.",
+      "qtyModal": {
+        "title": "Enter Quantity — {{title}}",
+        "label": "Quantity",
+        "confirm": "Add to Cart"
+      }
+    },
+    "heldPicker": {
+      "title": "Held Sales",
+      "empty": "No held sales.",
+      "resume": "Resume",
+      "itemCount": "{{count}} item(s)"
+    },
+    "payment": {
+      "title": "Payment",
+      "methods": {
+        "cash": "Cash",
+        "card": "Card",
+        "mobile_wallet": "Mobile Wallet",
+        "credit": "Credit Account",
+        "other": "Other"
+      },
+      "amount": "Amount",
+      "addPayment": "Add Payment",
+      "remove": "Remove",
+      "totalDue": "Total Due",
+      "totalPaid": "Total Paid",
+      "changeDue": "Change Due",
+      "remaining": "Remaining",
+      "confirm": "Complete Sale",
+      "customer": "Customer",
+      "walkIn": "Walk-in (no customer)",
+      "customerSearchPlaceholder": "Search customers by name or phone",
+      "availableCredit": "Available credit: {{amount}}"
+    },
+    "receiptModal": {
+      "title": "Receipt",
+      "paperSize": "Paper size",
+      "paperSizeA4": "A4",
+      "paperSizeA5": "A5",
+      "paperSizeThermal": "80mm Thermal",
+      "exportPdf": "Export PDF",
+      "printThermal": "Print Receipt",
+      "pdfSaved": "Saved to {{path}}",
+      "printSuccess": "Sent to printer.",
+      "printerUnavailable": "Couldn't reach the thermal printer. Check it's connected and configured in Settings.",
+      "newSale": "Start New Sale",
+      "close": "Close"
+    },
+    "reprint": {
+      "title": "Find Invoice",
+      "searchPlaceholder": "Search by invoice number",
+      "noResults": "No invoices found.",
+      "view": "View / Reprint"
+    }
+  },
+  "quotations": {
+    "title": "Quotations",
+    "tabs": {
+      "create": "New Quotation",
+      "list": "Quotations"
+    },
+    "form": {
+      "validUntil": "Valid until",
+      "notes": "Notes",
+      "saveQuotation": "Save Quotation"
+    },
+    "noResults": "No quotations yet.",
+    "table": {
+      "quoteNo": "Quote No",
+      "status": "Status",
+      "customer": "Customer",
+      "total": "Total",
+      "validUntil": "Valid Until"
+    },
+    "status": {
+      "open": "Open",
+      "converted": "Converted",
+      "expired": "Expired",
+      "cancelled": "Cancelled"
+    },
+    "actions": {
+      "viewPrint": "View / Print",
+      "void": "Void",
+      "convertToSale": "Convert to Sale",
+      "confirmVoid": "Void this quotation? It can no longer be converted to a sale."
+    }
+  },
+  "register": {
+    "title": "Register Closing",
+    "businessDate": "Business Date",
+    "openingFloat": "Opening Float",
+    "cashSales": "Cash Sales",
+    "nonCashSales": "Non-Cash Sales",
+    "expectedCash": "Expected Cash",
+    "countedCash": "Counted Cash",
+    "variance": "Variance",
+    "notes": "Notes",
+    "close": "Close Register",
+    "confirmClose": "Close the register for {{date}}? This creates a permanent reconciliation record.",
+    "history": "Closing History",
+    "noHistory": "No register closings yet.",
+    "table": {
+      "date": "Date",
+      "openingFloat": "Opening",
+      "cashSales": "Cash Sales",
+      "counted": "Counted",
+      "variance": "Variance"
+    }
+  },
+  "customers": {
+    "title": "Customers",
+    "tabs": {
+      "customers": "Customers",
+      "preorders": "Preorders"
+    },
+    "list": {
+      "searchPlaceholder": "Search by name, phone, or email",
+      "addCustomer": "Add Customer",
+      "editCustomer": "Edit Customer",
+      "noResults": "No customers match your search.",
+      "creditBadge": "Credit",
+      "table": {
+        "name": "Name",
+        "phone": "Phone",
+        "creditBalance": "Credit Balance",
+        "loyaltyPoints": "Loyalty Points"
+      },
+      "recordPayment": "Record Payment",
+      "adjustPoints": "Adjust Points"
+    },
+    "form": {
+      "nameRequired": "Name is required.",
+      "name": "Name",
+      "phone": "Phone",
+      "email": "Email",
+      "address": "Address",
+      "isCreditAccount": "Credit account",
+      "creditLimit": "Credit limit"
+    },
+    "creditPayment": {
+      "title": "Record Credit Payment — {{name}}",
+      "currentBalance": "Current balance owed: {{amount}}",
+      "amount": "Payment amount",
+      "submit": "Record Payment"
+    },
+    "loyalty": {
+      "title": "Adjust Loyalty Points — {{name}}",
+      "currentPoints": "Current points: {{points}}",
+      "pointsChange": "Points change",
+      "pointsChangeHint": "Use a positive number to add points, negative to redeem.",
+      "reason": "Reason",
+      "submit": "Apply"
+    },
+    "preorders": {
+      "create": "New Preorder",
+      "customer": "Customer",
+      "title": "Book title",
+      "isbn": "ISBN (if known)",
+      "quantity": "Quantity",
+      "notes": "Notes",
+      "noResults": "No preorders yet.",
+      "table": {
+        "customer": "Customer",
+        "title": "Title",
+        "quantity": "Qty",
+        "status": "Status"
+      },
+      "status": {
+        "pending": "Pending",
+        "notified": "Notified",
+        "fulfilled": "Fulfilled",
+        "cancelled": "Cancelled"
+      },
+      "markNotified": "Mark Notified",
+      "markFulfilled": "Mark Fulfilled",
+      "cancel": "Cancel"
+    }
+  },
+  "suppliers": {
+    "title": "Suppliers",
+    "tabs": {
+      "suppliers": "Suppliers",
+      "purchaseOrders": "Purchase Orders",
+      "goodsReceived": "Goods Received",
+      "payments": "Payments"
+    },
+    "list": {
+      "searchPlaceholder": "Search by name, phone, or email",
+      "addSupplier": "Add Supplier",
+      "editSupplier": "Edit Supplier",
+      "noResults": "No suppliers match your search.",
+      "table": {
+        "name": "Name",
+        "contactPerson": "Contact",
+        "phone": "Phone",
+        "balance": "Balance Owed"
+      }
+    },
+    "form": {
+      "nameRequired": "Name is required.",
+      "name": "Name",
+      "contactPerson": "Contact person",
+      "phone": "Phone",
+      "email": "Email",
+      "address": "Address"
+    },
+    "purchaseOrders": {
+      "create": "New Purchase Order",
+      "supplier": "Supplier",
+      "expectedDate": "Expected date",
+      "notes": "Notes",
+      "addLine": "Add Item",
+      "noResults": "No purchase orders yet.",
+      "table": {
+        "poNo": "PO No",
+        "supplier": "Supplier",
+        "status": "Status",
+        "orderDate": "Order Date"
+      },
+      "status": {
+        "draft": "Draft",
+        "sent": "Sent",
+        "partially_received": "Partially Received",
+        "received": "Received",
+        "cancelled": "Cancelled"
+      },
+      "cancel": "Cancel Order"
+    },
+    "goodsReceived": {
+      "create": "New Goods Received Note",
+      "supplier": "Supplier",
+      "linkedPo": "Linked purchase order (optional)",
+      "noPo": "No linked purchase order",
+      "notes": "Notes",
+      "addLine": "Add Item",
+      "noResults": "No goods received notes yet.",
+      "table": {
+        "grnNo": "GRN No",
+        "supplier": "Supplier",
+        "receivedDate": "Received",
+        "total": "Total"
+      },
+      "receivedSummary": "Stock updated and supplier balance increased by {{amount}}."
+    },
+    "lineItem": {
+      "book": "Book",
+      "quantity": "Quantity",
+      "unitCost": "Unit cost",
+      "remove": "Remove"
+    },
+    "payments": {
+      "create": "Record Payment",
+      "supplier": "Supplier",
+      "amount": "Amount",
+      "method": "Method",
+      "reference": "Reference",
+      "dueDate": "Due date (optional)",
+      "paidImmediately": "Paid now",
+      "noResults": "No supplier payments yet.",
+      "table": {
+        "supplier": "Supplier",
+        "amount": "Amount",
+        "dueDate": "Due Date",
+        "paidDate": "Paid Date",
+        "status": "Status"
+      },
+      "unpaid": "Unpaid",
+      "paid": "Paid",
+      "markPaid": "Mark Paid"
+    }
+  },
+  "pricing": {
+    "title": "Discounts & Tax",
+    "tabs": {
+      "taxRates": "Tax Rates",
+      "discounts": "Discounts",
+      "comboOffers": "Combo Offers"
+    },
+    "taxRates": {
+      "add": "Add Tax Rate",
+      "edit": "Edit Tax Rate",
+      "name": "Name",
+      "ratePercent": "Rate (%)",
+      "isExempt": "Tax-exempt",
+      "isDefault": "Default for new books",
+      "exempt": "Exempt",
+      "noResults": "No tax rates yet.",
+      "table": {
+        "name": "Name",
+        "rate": "Rate",
+        "default": "Default"
+      },
+      "activate": "Activate",
+      "deactivate": "Deactivate"
+    },
+    "discounts": {
+      "add": "Add Discount",
+      "edit": "Edit Discount",
+      "name": "Name",
+      "type": "Type",
+      "value": "Value",
+      "scope": "Applies to",
+      "book": "Book",
+      "category": "Category",
+      "startsAt": "Starts (optional)",
+      "endsAt": "Ends (optional)",
+      "types": {
+        "percent": "Percentage",
+        "fixed": "Fixed amount"
+      },
+      "scopes": {
+        "item": "Specific book",
+        "category": "Category",
+        "all": "Entire store"
+      },
+      "noResults": "No discounts yet.",
+      "table": {
+        "name": "Name",
+        "type": "Type",
+        "value": "Value",
+        "scope": "Applies to",
+        "window": "Active window"
+      },
+      "activate": "Activate",
+      "deactivate": "Deactivate"
+    },
+    "comboOffers": {
+      "add": "Add Combo Offer",
+      "edit": "Edit Combo Offer",
+      "name": "Name",
+      "buyQuantity": "Buy quantity",
+      "freeQuantity": "Free quantity",
+      "scope": "Applies to",
+      "book": "Book",
+      "category": "Category",
+      "startsAt": "Starts (optional)",
+      "endsAt": "Ends (optional)",
+      "hint": "e.g. \"Buy 2 Get 1 Free\" = buy quantity 2, free quantity 1",
+      "noResults": "No combo offers yet.",
+      "table": {
+        "name": "Name",
+        "buyFree": "Buy / Free",
+        "scope": "Applies to",
+        "window": "Active window"
+      },
+      "activate": "Activate",
+      "deactivate": "Deactivate"
+    }
+  },
+  "reports": {
+    "title": "Reports",
+    "tabs": {
+      "summary": "Sales Summary",
+      "bestSellers": "Best / Slow Sellers",
+      "profitLoss": "Profit & Loss",
+      "salesBy": "Sales By"
+    },
+    "dateRange": {
+      "from": "From",
+      "to": "To"
+    },
+    "exportPdf": "Export PDF",
+    "exportExcel": "Export Excel",
+    "pdfSaved": "Saved to {{path}}",
+    "excelSaved": "Saved to {{path}}",
+    "noData": "No data for the selected range.",
+    "totalLabel": "Total",
+    "summary": {
+      "granularity": "Group by",
+      "granularityOptions": {
+        "day": "Day",
+        "week": "Week",
+        "month": "Month"
+      },
+      "table": {
+        "period": "Period",
+        "salesCount": "Sales",
+        "itemsSold": "Items Sold",
+        "revenue": "Revenue"
+      }
+    },
+    "bestSellers": {
+      "mode": "Show",
+      "modeOptions": {
+        "best": "Best Sellers",
+        "slow": "Slow Movers"
+      },
+      "limit": "Show top",
+      "table": {
+        "title": "Title",
+        "isbn": "ISBN",
+        "quantitySold": "Qty Sold",
+        "revenue": "Revenue"
+      }
+    },
+    "profitLoss": {
+      "revenue": "Revenue",
+      "cogs": "Cost of Goods Sold",
+      "grossProfit": "Gross Profit",
+      "note": "Gross profit only (revenue minus cost of goods sold) — not a full net-profit statement, since operating expenses aren't tracked in the system."
+    },
+    "salesBy": {
+      "groupBy": "Group by",
+      "groupByOptions": {
+        "category": "Category",
+        "author": "Author",
+        "supplier": "Supplier",
+        "cashier": "Cashier"
+      },
+      "table": {
+        "label": "Name",
+        "quantitySold": "Qty Sold",
+        "revenue": "Revenue"
+      },
+      "uncategorized": "Uncategorized",
+      "unknownAuthor": "Unknown Author",
+      "unknownSupplier": "Unknown / Direct Stock",
+      "supplierNote": "Attributed to each book's most recently received supplier — a best-effort estimate, not a guaranteed per-sale record."
+    }
+  },
+  "returns": {
+    "title": "Returns",
+    "tabs": {
+      "process": "Process Return",
+      "pending": "Pending Approvals"
+    },
+    "process": {
+      "searchPlaceholder": "Enter invoice number",
+      "search": "Find Invoice",
+      "notFound": "No invoice found with that number.",
+      "invoiceLabel": "Invoice {{invoiceNo}}",
+      "table": {
+        "item": "Item",
+        "purchasedQty": "Purchased",
+        "alreadyReturned": "Already Returned",
+        "returnQty": "Return Qty",
+        "refundAmount": "Refund"
+      },
+      "reason": "Reason",
+      "refundMethod": "Refund Method",
+      "submit": "Submit Return",
+      "needsApproval": "This return needs manager approval because the refund ({{amount}}) exceeds the threshold ({{threshold}}).",
+      "completedSummary": "Return {{returnNo}} completed. Refunded {{amount}}.",
+      "pendingSummary": "Return {{returnNo}} submitted and is awaiting manager approval."
+    },
+    "pending": {
+      "noResults": "No returns awaiting approval.",
+      "table": {
+        "returnNo": "Return No",
+        "invoice": "Invoice",
+        "refundTotal": "Refund Total",
+        "reason": "Reason"
+      },
+      "approve": "Approve",
+      "reject": "Reject",
+      "confirmApprove": "Approve this return? Stock will be added back and the refund finalized.",
+      "confirmReject": "Reject this return? No stock or refund changes will be made.",
+      "thresholdLabel": "Approval threshold",
+      "thresholdHint": "Returns with a refund total above this amount require approval here before stock/refund are applied.",
+      "thresholdSave": "Save",
+      "thresholdSaved": "Approval threshold updated."
+    }
+  },
+  "session": {
+    "login": {
+      "title": "Sign In",
+      "username": "Username",
+      "password": "Password",
+      "submit": "Sign In"
+    },
+    "lock": {
+      "title": "Session Locked",
+      "message": "Enter your password to continue where you left off.",
+      "unlock": "Unlock"
+    },
+    "logout": "Logout",
+    "confirmLogout": "Sign out?",
+    "changePassword": {
+      "title": "Change Password",
+      "current": "Current Password",
+      "new": "New Password",
+      "submit": "Change Password",
+      "success": "Password changed."
+    },
+    "idleTimeout": {
+      "label": "Auto-lock after (minutes)",
+      "save": "Save",
+      "saved": "Idle timeout updated."
+    }
+  },
+  "users": {
+    "title": "Users",
+    "add": "Add User",
+    "edit": "Edit User",
+    "username": "Username",
+    "password": "Password",
+    "fullName": "Full Name",
+    "fullNameRequired": "Full name is required.",
+    "usernamePasswordRequired": "Username and password are required.",
+    "role": "Role",
+    "language": "Language",
+    "roles": {
+      "admin": "Admin",
+      "manager": "Manager",
+      "cashier": "Cashier"
+    },
+    "resetPassword": "Reset Password",
+    "resetPasswordTitle": "Reset Password — {{name}}",
+    "newPassword": "New Password",
+    "noResults": "No users yet.",
+    "table": {
+      "username": "Username",
+      "fullName": "Full Name",
+      "role": "Role"
+    },
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "inactive": "Inactive"
+  },
+  "backup": {
+    "title": "Backup & Recovery",
+    "settings": {
+      "sectionTitle": "Backup Settings",
+      "folder": "Backup folder",
+      "chooseFolder": "Choose Folder",
+      "autoEnabled": "Automatic backups",
+      "intervalHours": "Back up every (hours)",
+      "retentionCount": "Keep the most recent",
+      "retentionCountSuffix": "backups",
+      "save": "Save Settings",
+      "saved": "Backup settings updated."
+    },
+    "status": {
+      "lastBackup": "Last backup: {{date}}",
+      "lastBackupNever": "No backups have been taken yet."
+    },
+    "actions": {
+      "backupNow": "Backup Now",
+      "backupNowSuccess": "Backup created: {{fileName}}",
+      "openFolder": "Open Backup Folder",
+      "restoreFromFile": "Restore From File..."
+    },
+    "history": {
+      "title": "Backup History",
+      "noResults": "No backups found in this folder yet.",
+      "table": {
+        "fileName": "File",
+        "size": "Size",
+        "createdAt": "Created"
+      },
+      "restore": "Restore"
+    },
+    "restoreConfirm": {
+      "title": "Restore Backup",
+      "warning": "This will replace ALL current data with the contents of \"{{fileName}}\". This cannot be undone. The application will restart automatically once the restore is complete.",
+      "confirm": "Restore and Restart",
+      "restarting": "Restoring backup and restarting the application..."
+    }
+  },
+  "auditLog": {
+    "title": "Audit Log",
+    "filters": {
+      "entityType": "Entity Type",
+      "action": "Action",
+      "user": "User"
+    },
+    "actions": {
+      "create": "Created",
+      "update": "Updated",
+      "delete": "Deleted"
+    },
+    "entityTypes": {
+      "books": "Books",
+      "categories": "Categories",
+      "combo_offers": "Combo Offers",
+      "customers": "Customers",
+      "discounts": "Discounts",
+      "goods_received_notes": "Goods Received Notes",
+      "preorders": "Preorders",
+      "purchase_orders": "Purchase Orders",
+      "register_closings": "Register Closings",
+      "returns": "Returns",
+      "sales": "Sales",
+      "stock_takes": "Stock Takes",
+      "supplier_payments": "Supplier Payments",
+      "suppliers": "Suppliers",
+      "tax_rates": "Tax Rates",
+      "users": "Users"
+    },
+    "table": {
+      "date": "Date",
+      "user": "User",
+      "action": "Action",
+      "entity": "Entity",
+      "entityId": "ID",
+      "changes": "Changes"
+    },
+    "systemUser": "System",
+    "noResults": "No audit log entries match these filters.",
+    "noChanges": "No details recorded",
+    "pagination": {
+      "showing": "Showing {{from}}–{{to}} of {{total}}",
+      "previous": "Previous",
+      "next": "Next"
+    }
+  }
+}

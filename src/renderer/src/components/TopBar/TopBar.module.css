@@ -1,0 +1,117 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 24px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.appName {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* flex-wrap (not a fixed-row grid) so the nav wraps based on the width
+   actually left over between appName and rightGroup — at the default
+   window size that's two rows for every role, but this guarantees no tab
+   is ever pushed off-screen (as a fixed-2-row grid with grid-auto-columns
+   would do for the admin role's full 12-tab set) even if the window is
+   narrower or a future role/tab list grows past what two rows can hold at
+   1024px, the app's documented minWidth. */
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 6px;
+}
+
+.navButton,
+.navButtonActive {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.navButton:hover {
+  background: var(--color-bg);
+}
+
+.navButtonActive {
+  background: var(--color-bg);
+  color: var(--tab-accent, var(--color-primary));
+  border-bottom: 2px solid var(--tab-accent, var(--color-primary));
+}
+
+.navIcon {
+  flex-shrink: 0;
+}
+
+.languageSwitcher {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.langButton,
+.langButtonActive {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.langButtonActive {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.rightGroup {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.userName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.logoutButton {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.logoutButton:hover {
+  background: var(--color-bg);
+}

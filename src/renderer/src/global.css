@@ -1,0 +1,43 @@
+@import '@fontsource/noto-sans-sinhala/400.css';
+@import '@fontsource/noto-sans-sinhala/500.css';
+@import '@fontsource/noto-sans-sinhala/700.css';
+
+:root {
+  color-scheme: light;
+  --color-bg: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-border: #dde1e6;
+  --color-text: #1b1f24;
+  --color-text-muted: #5b6472;
+  --color-primary: #1f6feb;
+  --color-primary-contrast: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* Noto Sans Sinhala is bundled so Sinhala text renders correctly on any
+     Windows machine, even one without the font installed system-wide. */
+  font-family:
+    'Segoe UI',
+    'Noto Sans Sinhala',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}

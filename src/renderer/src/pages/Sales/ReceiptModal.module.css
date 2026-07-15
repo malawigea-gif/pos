@@ -1,0 +1,74 @@
+.status {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.receipt {
+  font-family: 'Noto Sans Sinhala', 'Segoe UI', monospace;
+  font-size: 13px;
+}
+
+.paperSizeOptions {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.paperSizeOption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.center {
+  text-align: center;
+  margin: 0 0 4px;
+}
+
+.centerMuted {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.itemsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.itemsTable th {
+  text-align: left;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  padding-bottom: 4px;
+}
+
+.itemsTable td {
+  padding: 2px 0;
+}
+
+.num {
+  text-align: right;
+}
+
+.totalsRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.grandTotal {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 4px 0;
+}

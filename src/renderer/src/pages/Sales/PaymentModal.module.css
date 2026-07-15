@@ -1,0 +1,49 @@
+.totalDue {
+  display: flex;
+  justify-content: space-between;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.row select {
+  flex: 1;
+}
+
+.row input {
+  width: 120px;
+}
+
+.row button {
+  border: none;
+  background: transparent;
+  color: #c62828;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.summary {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary > div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.remaining {
+  color: #c62828;
+  font-weight: 600;
+}

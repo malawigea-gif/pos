@@ -1,0 +1,120 @@
+.page {
+  padding: 32px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 24px;
+  color: var(--page-accent, var(--color-text));
+}
+
+/* Same two-column convention as Sales' SaleTab.module.css .layout: a
+   flexible main column plus a fixed-width side column, no wrap/stack
+   breakpoint — this app targets one fixed-size desktop window
+   (minWidth 1024), not a responsive layout. */
+.layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  max-width: 640px;
+}
+
+.copyrightPanel {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.copyrightPanel p {
+  margin: 0 0 10px;
+}
+
+.copyrightPanel p:last-child {
+  margin-bottom: 0;
+}
+
+.copyrightPanel a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.copyrightTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+  color: var(--color-text-muted);
+}
+
+.section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+
+.fieldLabel {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.fieldDescription {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.languageOptions {
+  display: flex;
+  gap: 12px;
+}
+
+.option,
+.optionActive {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.option:hover {
+  border-color: var(--color-primary);
+}
+
+.optionActive {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  font-weight: 600;
+}

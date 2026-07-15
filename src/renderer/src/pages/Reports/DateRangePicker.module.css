@@ -1,0 +1,10 @@
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.row > div {
+  margin-bottom: 0;
+}

@@ -1,0 +1,86 @@
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.toolbar > input {
+  flex: 1;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+
+.table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+}
+
+.inactiveRow {
+  opacity: 0.6;
+}
+
+.actionsCell {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.actionsCell button {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.badgeWarn,
+.badgeMuted {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badgeWarn {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.badgeMuted {
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+
+.statusNotice {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.totalsRow td {
+  font-weight: 700;
+  border-top: 2px solid var(--color-text);
+}

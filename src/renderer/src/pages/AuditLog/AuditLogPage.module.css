@@ -1,0 +1,39 @@
+.filtersRow {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.filtersRow > div {
+  min-width: 160px;
+}
+
+.changesList {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.changesList li {
+  white-space: nowrap;
+}
+
+.paginationRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.paginationText {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.paginationButtons {
+  display: flex;
+  gap: 8px;
+}
