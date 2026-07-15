@@ -97,6 +97,8 @@
     "FORBIDDEN": "You don't have permission to do that",
     "INVALID_BACKUP_SETTINGS": "Check the backup settings and try again",
     "INVALID_BACKUP_FILE": "That file doesn't look like a valid LankaPOS backup",
+    "PG_TOOL_NOT_FOUND": "PostgreSQL client tools (pg_dump/pg_restore) were not found on this PC. Install PostgreSQL and make sure its bin folder is on this PC's PATH, then try again.",
+    "PG_BACKUP_FAILED": "The backup/restore command failed. Check that pg_dump/pg_restore are correctly installed and that the server connection details in Settings are correct.",
     "UNKNOWN": "Something went wrong. Please try again."
   },
   "inventory": {
@@ -725,6 +727,7 @@
   },
   "backup": {
     "title": "Backup & Recovery",
+    "networkedHint": "This till is in Networked mode: backups and restores use pg_dump/pg_restore against the shared server instead of copying a local file. These require the PostgreSQL client tools to be installed on THIS PC (not the server) — install PostgreSQL here too if \"Backup Now\" fails with a tool-not-found error.",
     "settings": {
       "sectionTitle": "Backup Settings",
       "folder": "Backup folder",

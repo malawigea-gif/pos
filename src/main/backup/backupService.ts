@@ -5,13 +5,17 @@ import type { Kysely } from 'kysely'
 import type { Database } from '../db/types'
 import { getSetting, setSetting } from '../db/repositories/settingsRepository'
 import { getStandaloneSqlite } from '../db'
+import { createPgBackupFile } from './postgresBackupService'
+import type { NetworkedDbConfig } from '../../shared/appConfig'
 import type { BackupFileInfo, BackupSettings, UpdateBackupSettingsRequest } from '../../shared/backup'
 
 // Matches both the current "lankapos-backup-*" filenames and the older
 // "lankapos-bookshop-backup-*" ones written before the LankaPOS-bookshop ->
 // LankaPOS rename, so backups made by older installs still show up and
-// remain restorable.
-const BACKUP_FILENAME_PATTERN = /^lankapos(?:-bookshop)?-backup-\d{8}-\d{6}\.db$/
+// remain restorable. Also matches Networked mode's ".dump" (pg_dump custom
+// format) alongside Standalone's ".db" — both mechanisms share the same
+// folder/list/retention-pruning UX, they just produce a different file.
+const BACKUP_FILENAME_PATTERN = /^lankapos(?:-bookshop)?-backup-\d{8}-\d{6}\.(db|dump)$/
 
 const SETTING_KEYS = {
   folder: 'backup.folder',
@@ -146,13 +150,20 @@ export async function pruneBackups(folder: string, retentionCount: number): Prom
   await Promise.all(excess.map((b) => rm(b.filePath, { force: true })))
 }
 
+/** `networkedConfig` is null for Standalone (the caller — ipc/backup.ts —
+ *  decides this from the same app-config.json read at startup that decided
+ *  which Kysely dialect to connect with) and picks the pg_dump path instead
+ *  of the SQLite file-copy path when set. */
 export async function runBackupNow(
   db: Kysely<Database>,
   defaultFolder: string,
-  userId: number | null
+  userId: number | null,
+  networkedConfig: NetworkedDbConfig | null
 ): Promise<BackupFileInfo> {
   const settings = await getBackupSettings(db, defaultFolder)
-  const info = await createBackupFile(getStandaloneSqlite(), settings.folder)
+  const info = networkedConfig
+    ? await createPgBackupFile(networkedConfig, settings.folder)
+    : await createBackupFile(getStandaloneSqlite(), settings.folder)
   await pruneBackups(settings.folder, settings.retentionCount)
   await setSetting(db, SETTING_KEYS.lastBackupAt, info.createdAt, userId)
   return info
@@ -161,7 +172,11 @@ export async function runBackupNow(
 /** Called periodically from the main process — a no-op unless auto-backup
  *  is enabled and the configured interval has actually elapsed, so it's
  *  safe to call this often (e.g. every 15 minutes) without over-backing-up. */
-export async function runScheduledBackupIfDue(db: Kysely<Database>, defaultFolder: string): Promise<void> {
+export async function runScheduledBackupIfDue(
+  db: Kysely<Database>,
+  defaultFolder: string,
+  networkedConfig: NetworkedDbConfig | null
+): Promise<void> {
   const settings = await getBackupSettings(db, defaultFolder)
   if (!settings.autoEnabled) return
 
@@ -170,7 +185,7 @@ export async function runScheduledBackupIfDue(db: Kysely<Database>, defaultFolde
     : 0
   if (Date.now() < dueAt) return
 
-  await runBackupNow(db, defaultFolder, null)
+  await runBackupNow(db, defaultFolder, null, networkedConfig)
 }
 
 export async function validateBackupFile(filePath: string): Promise<void> {

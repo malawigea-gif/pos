@@ -25,6 +25,7 @@ import {
 } from '../db/repositories/usersRepository'
 import { ForbiddenError, NotAuthenticatedError, SessionLockedError, requireRole } from '../auth/session'
 import { InvalidBackupFileError, InvalidBackupSettingsError } from '../backup/backupService'
+import { InvalidPgBackupFileError, PgBackupFailedError, PgToolNotFoundError } from '../backup/postgresBackupService'
 import { isConnectionError } from '../db/client-postgres'
 import type { UserRole } from '../db/types'
 
@@ -164,6 +165,23 @@ export function toIpcError(error: unknown): Error {
     return encodeIpcError({ code: 'INVALID_BACKUP_SETTINGS', message: error.message })
   }
   if (error instanceof InvalidBackupFileError) {
+    return encodeIpcError({ code: 'INVALID_BACKUP_FILE', message: error.message })
+  }
+  if (error instanceof PgToolNotFoundError) {
+    return encodeIpcError({
+      code: 'PG_TOOL_NOT_FOUND',
+      message: error.message,
+      details: { tool: error.tool }
+    })
+  }
+  if (error instanceof PgBackupFailedError) {
+    return encodeIpcError({
+      code: 'PG_BACKUP_FAILED',
+      message: error.message,
+      details: { tool: error.tool, stderr: error.stderr }
+    })
+  }
+  if (error instanceof InvalidPgBackupFileError) {
     return encodeIpcError({ code: 'INVALID_BACKUP_FILE', message: error.message })
   }
   if (error instanceof Error) return error

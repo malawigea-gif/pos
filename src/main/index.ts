@@ -87,15 +87,16 @@ app.whenReady().then(async () => {
     registerPricingIpc(db)
     registerReportsIpc(db)
     registerReturnsIpc(db)
-    registerBackupIpc(db)
+    registerBackupIpc(db, config)
     registerAuditIpc(db)
     registerSettingsIpc(db)
     registerQuotationsIpc(db)
     registerSystemIpc(db)
 
+    const networkedConfig = config.mode === 'networked' ? config.networked : null
     const defaultBackupFolder = join(app.getPath('userData'), 'backups')
     const checkScheduledBackup = (): void => {
-      runScheduledBackupIfDue(db, defaultBackupFolder).catch((err) =>
+      runScheduledBackupIfDue(db, defaultBackupFolder, networkedConfig).catch((err) =>
         console.error('[backup] scheduled backup check failed', err)
       )
     }

@@ -22,6 +22,7 @@ export function BackupPage(): JSX.Element {
   const describeError = useDescribeError()
   const lang = i18n.language as SupportedLanguage
 
+  const [isNetworked, setIsNetworked] = useState(false)
   const [settings, setSettings] = useState<BackupSettings | null>(null)
   const [folder, setFolder] = useState('')
   const [autoEnabled, setAutoEnabled] = useState(true)
@@ -60,6 +61,7 @@ export function BackupPage(): JSX.Element {
   useEffect(() => {
     loadSettings().catch((err) => setError(describeError(err)))
     loadBackups()
+    window.api.appConfig.get().then((config) => setIsNetworked(config.mode === 'networked'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -124,6 +126,8 @@ export function BackupPage(): JSX.Element {
   return (
     <div className={pageStyles.page} style={{ '--page-accent': TAB_ACCENT_COLORS.backup } as React.CSSProperties}>
       <h1 className={pageStyles.title}>{t('backup.title')}</h1>
+
+      {isNetworked && <p className={styles.networkedHint}>{t('backup.networkedHint')}</p>}
 
       {error && <div className={formStyles.error}>{error}</div>}
 
