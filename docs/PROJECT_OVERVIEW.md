@@ -5,18 +5,31 @@ before touching code.
 
 ## 1. What this project is
 
-LankaPOS (formerly "LankaPOS-bookshop") is an offline-first, bilingual (English / Sinhala) Point of
-Sale system for a single school stationery/equipment shop. (The product name
-retains "bookshop" for historical/branding reasons — the app itself, and its
-internal `books` table/catalog terminology, are general-purpose and not
-specific to books; see §5's Inventory notes for the "Item" relabel in the
-UI.) It's an Electron desktop app: React + TypeScript in the renderer, a
-Node.js main process, and a local SQLite database (via Kysely as the query
-builder). There is no server and no network dependency for core operation —
-everything runs on one Windows PC. The bilingual requirement is
-architectural, not cosmetic: every piece of UI chrome and system-generated
-text goes through i18next, while user-entered data (item titles, customer
-names, etc.) is never translated or transliterated.
+LankaPOS (formerly "LankaPOS-bookshop") is a bilingual (English / Sinhala)
+Point of Sale system for a single school stationery/equipment shop, built
+to run either as a single till or as several tills in the same shop sharing
+one database over the LAN. (The product name retains "bookshop" for
+historical/branding reasons — the app itself, and its internal `books`
+table/catalog terminology, are general-purpose and not specific to books;
+see §5's Inventory notes for the "Item" relabel in the UI.) It's an
+Electron desktop app: React + TypeScript in the renderer, a Node.js main
+process, and one of two interchangeable database backends depending on
+install mode (via Kysely as the query builder in both cases — see §2's
+"Database mode" section):
+
+- **Standalone** — a local SQLite database, no server and no network
+  dependency at all. This is the original, still fully supported mode for
+  a single-till shop, and remains the default for a fresh install.
+- **Networked** — every till connects over the LAN to one shared
+  PostgreSQL server on a dedicated machine, so multiple tills see the same
+  live inventory, sales, and customer data. This is still explicitly a
+  single-shop, LAN-only design — see §5 for what "multi-till" does and
+  does not mean here.
+
+The bilingual requirement is architectural, not cosmetic: every piece of UI
+chrome and system-generated text goes through i18next, while user-entered
+data (item titles, customer names, etc.) is never translated or
+transliterated.
 
 ## 2. Architecture
 
@@ -134,16 +147,109 @@ longer has a fixed `height` (it did when nav was always a single row) — it
 now sizes to its tallest child via padding, so a taller multi-row nav
 doesn't get clipped.
 
+**Database mode.** `standalone` (the original, SQLite, single-till
+behavior — unchanged) vs `networked` (multiple tills sharing one Postgres
+server over the LAN). The mode, and for `networked` the connection details
+(host, port, database, username, password), are read from a small plain-fs
+JSON file — `app-config.json` in the userData folder, loaded/saved by
+`src/main/config/appConfig.ts` — rather than from inside the database
+itself, since the app has to know which database to even connect to before
+it can open one. `initDatabase()` (`src/main/db/index.ts`) reads this file
+and constructs either a `SqliteDialect` (`src/main/db/client.ts`) or a
+`PostgresDialect` (`src/main/db/client-postgres.ts`) Kysely instance
+accordingly, returning a discriminated `AppDbConnection` (`mode:
+'standalone' | 'networked'`). Every repository and IPC handler still only
+ever touches the resulting `Kysely<Database>` — the whole point of using
+Kysely, and specifically why it was chosen originally (see §4) — so
+nothing downstream needs a single `if` on which dialect is active. The one
+exception is file-based backup/restore, which only means something in
+Standalone mode: `getStandaloneSqlite()` (`src/main/db/index.ts`) is an
+explicit escape hatch for that handful of call sites, throwing rather than
+silently no-op-ing if called while Networked.
+
+An admin switches modes (and, for Networked, enters/tests the connection)
+from Settings → Server Connection (`ServerConnectionForm.tsx`, shared
+between that in-app screen and the startup-failure recovery screen below —
+same component, two different mounting contexts). Changing mode requires a
+restart — the main process doesn't hot-swap an open database connection
+mid-session.
+
+**Startup failure (Networked mode).** If a till can't reach its configured
+server at all — wrong IP, server down, firewall — `initDatabase()`'s
+rejection is caught in `src/main/index.ts` and, only when the configured
+mode is `networked`, turned into a `system:getStartupStatus` result
+(`{ok: false, mode, error}`) instead of the native-dialog-and-quit that
+Standalone's failure path still uses unchanged (a corrupted local file
+isn't something a Retry button helps with, unlike a network hiccup). The
+window still opens; `App.tsx` checks this status before its usual
+session/login flow and renders `ServerUnreachableScreen.tsx` instead —
+translated error, a technical-details toggle, a Retry button (a full
+`app.relaunch()`, reusing the exact same boot sequence), and a "Fix
+Connection Settings" action that reaches the same `ServerConnectionForm`
+with no login required. That last part matters structurally:
+`src/main/ipc/appConfig.ts`'s channels are deliberately unguarded (no
+`withRole`, unlike every other admin-only channel in this app) because
+this screen by definition has no database and therefore no session to
+check a role against — the in-app Settings section is still what gates the
+UI to admins during normal, connected use; the IPC layer underneath simply
+can't enforce that same gate when there's nothing to authenticate against.
+
+**Live connection loss (Networked mode).** Beyond startup, if the Postgres
+connection drops mid-session, `isConnectionError()`
+(`src/main/db/client-postgres.ts`) recognizes the resulting Node/net-level
+codes (`ECONNREFUSED`, `ETIMEDOUT`, etc.), Postgres's own SQLSTATE class 08
+(connection exception) codes, and pg's codeless "Connection terminated"
+client error, and `toIpcError()` (`src/main/ipc/errors.ts`) encodes any of
+these as a distinct `CONNECTION_LOST` code ahead of every domain error
+check. On the renderer side, every single `window.api.*` method goes
+through one `invoke()` wrapper in `src/preload/index.ts` (replacing direct
+`ipcRenderer.invoke()` calls project-wide) that flips a small pub/sub flag
+based on whether the most recent call succeeded or failed with
+`CONNECTION_LOST` — regardless of which of the ~150 channels it happened
+to be. `ConnectionBanner.tsx`, mounted once and unconditionally in
+`App.tsx`, subscribes to that flag and shows a fixed top banner while
+it's set, polling a trivial `system:ping` round trip every 5 seconds only
+while actually showing (a healthy connection pays zero extra cost). No
+offline queueing exists or is planned — a till simply can't complete an
+action while disconnected; this machinery only makes that failure clear
+instead of a generic "Something went wrong" scattered across every screen.
+
+**Multi-till concurrency.** A read-then-write-in-JS pattern on a shared
+numeric column (e.g. "read stock_qty, compute newQty in JS, write it back)
+never raced under Standalone/SQLite, because SQLite serializes all writers
+— but is a genuine lost-update race under Networked/Postgres, where two
+tills' transactions can run truly concurrently. Every such spot found in
+`src/main/db/repositories/` (stock deduction at checkout, customer credit
+balance, loyalty points, supplier balance) was rewritten as a single atomic
+`UPDATE col = col + ? WHERE ... <guard>` (Kysely's `.set((eb) => ({col:
+eb('col', '+', delta)}))`), with the original validation (insufficient
+stock/credit/points) moved into that same UPDATE's `WHERE` clause so it's
+checked against the row's true value at the moment of the write, not a
+possibly-stale read. Document numbers (`invoice_no`, `quote_no`, `po_no`,
+`grn_no`, `return_no`) were audited too and are *not* a race: each is
+derived from the row's own AUTOINCREMENT/`serial` id, already race-free by
+construction under both dialects. If you add a new balance-style column
+anywhere, follow the same atomic-UPDATE pattern rather than a
+read/compute/write round trip — see `stockRepository.ts`'s
+`adjustStockWithTrx()` for the reference implementation and its comment.
+
 ## 3. Folder structure
 
 ```
 src/
   main/
+    config/
+      appConfig.ts        Standalone/Networked mode + connection config — plain-fs
+                          app-config.json in userData, read before initDatabase()
     db/
       migrations/       One file per schema migration (0001_*.ts, 0002_*.ts, ...)
+                          dialectHelpers.ts — addIdColumn()/currentTimestampDefault(),
+                          the two spots a migration has to branch per dialect
       repositories/      One file per domain — all business logic + SQL lives here
       client.ts          better-sqlite3 + Kysely connection setup (WAL mode, FKs on)
-      index.ts           initDatabase()/getDb()/getDbPath() — the app's one DB connection
+      client-postgres.ts  pg.Pool + Kysely PostgresDialect setup; isConnectionError()
+      index.ts           initDatabase()/getDb()/getDbPath() — the app's one DB connection,
+                          picks SQLite or Postgres per app-config.json (see §2)
       migrator.ts        Static in-code map of migrations (see §4)
       seed.ts            Default admin + default tax rate seeding
       types.ts           Kysely `Database` interface — the schema's source of truth
@@ -151,14 +257,22 @@ src/
     auth/
       session.ts         Session singleton, login/lock/unlock, requireRole()
     ipc/                 One file per domain — registerXIpc(db), channel handlers
+                          (appConfig.ts and system.ts are the two Networked-mode
+                          exceptions — see §2's "Startup failure"/"Live connection loss")
     backup/
       backupService.ts   Backup/restore file operations (Electron-free, unit-testable)
+      postgresBackupService.ts  pg_dump/pg_restore child-process wrapper (Networked mode)
+    migration/
+      sqliteToPostgresMigration.ts  One-time SQLite -> Postgres data import (see §5)
     receipts/            Receipt rendering: HTML, PDF, ESC/POS text buffer, thermal print
     reports/             PDF/Excel export rendering for the Reports module
     pricing/
       computeSalePricing.ts   Discount/combo/tax pricing engine used at checkout
   preload/
-    index.ts             contextBridge — the only IPC bridge; exposes window.api
+    index.ts             contextBridge — the only IPC bridge; exposes window.api.
+                          Every method routes through one invoke() wrapper (not
+                          ipcRenderer.invoke() directly) that drives the Networked-mode
+                          connection-lost banner — see §2's "Live connection loss"
   renderer/src/
     locales/             en.json, si.json — all UI strings
     i18n.ts              i18next setup, language persistence
@@ -167,21 +281,27 @@ src/
       ipcError.ts         useDescribeError() — decodes structured IPC errors for display
     components/          Shared UI (TopBar, Modal, DataTable, Form styles, TabbedPage,
                          ItemSearchCart — barcode-scan/qty-modal cart UI shared by
-                         Sales + Quotations, CustomerSelect)
+                         Sales + Quotations, CustomerSelect, ServerConnectionForm,
+                         ConnectionBanner, DataMigrationSection)
     theme/
       tabColors.ts        TAB_ACCENT_COLORS — one accent color per AppPage tab
       tabIcons.ts          TAB_ICONS — one lucide-react icon per AppPage tab
-    session/             LoginScreen, LockScreen, SessionContext, useIdleLock
+    session/             LoginScreen, LockScreen, SessionContext, useIdleLock,
+                         ServerUnreachableScreen (Networked-mode startup failure)
     pages/               One folder per module/screen (Inventory, Sales, Customers, ...)
-  shared/                Types shared between main and renderer (one file per domain)
+  shared/                Types shared between main and renderer (one file per domain,
+                         including appConfig.ts and migration.ts)
 tests/
   unit/
     db/                  Repository tests (one file per repository, + migrations.test.ts)
     auth/                Session/login/lock/RBAC tests
-    backup/               backupService tests
-    ipc/                  withRole guard tests
+    backup/               backupService + postgresBackupService tests
+    ipc/                  withRole guard + toIpcError tests
     pricing/              computeSalePricing tests
     receipts/             ESC/POS text buffer tests
+  integration/          Opt-in, TEST_POSTGRES_URL-gated tests against a real Postgres
+                        server (migration compatibility, concurrency, data import) —
+                        see §7's "Testing against real Postgres"
 docs/
   PROJECT_OVERVIEW.md   This file
   USER_GUIDE.md         End-user guide (cashier/manager/admin) — keep in sync
@@ -191,17 +311,54 @@ docs/
 
 ## 4. Database
 
-SQLite via `better-sqlite3`, opened in WAL mode with `foreign_keys` enforced
-(`src/main/db/client.ts`), at `<userData>/lankapos-bookshop.db`
+Either SQLite (`better-sqlite3`, WAL mode, `foreign_keys` enforced,
+`src/main/db/client.ts`) or PostgreSQL (`pg`, `src/main/db/client-postgres.ts`)
+depending on the configured mode (see §2's "Database mode") — Standalone's
+SQLite file lives at `<userData>/lankapos-bookshop.db`
 (`app.getPath('userData')`, i.e. `%APPDATA%\LankaPOS\` once packaged — see §6
 for the one-time migration that moves this folder for upgraders coming from
 the pre-rename `%APPDATA%\LankaPOS-bookshop\` location). The `.db` filename
 itself keeps its pre-rename `lankapos-bookshop` spelling, same as the
 internal `books` table — it's not user-facing.
 Queries go through [Kysely](https://kysely.dev) rather than raw SQL — chosen
-specifically because it also has a PostgreSQL dialect, so a future
-multi-branch/server deployment could reuse the same query code and just
-swap the dialect.
+specifically because it also has a PostgreSQL dialect, which is exactly
+what let the Networked mode above reuse the same query code and just swap
+the dialect, rather than needing a second data-access layer.
+
+**Migration dialect compatibility.** The same 14 migration files run
+against either dialect (via the static map in `migrator.ts`, see below) —
+two constructs genuinely can't be written in a single dialect-agnostic
+form, so those two spots detect the dialect at runtime
+(`db.getExecutor().adapter instanceof PostgresAdapter`, a public Kysely
+API) and branch, via the shared helpers in
+`src/main/db/migrations/dialectHelpers.ts`:
+
+- **Auto-incrementing `id` primary keys** — SQLite's `INTEGER PRIMARY KEY
+  AUTOINCREMENT` has no Postgres equivalent keyword (a bare
+  `.primaryKey().autoIncrement()` compiles to MySQL-style `auto_increment`
+  under Kysely's Postgres compiler — a syntax error there). Postgres gets
+  `serial` instead, via `addIdColumn()`.
+- **`text` columns defaulting to `CURRENT_TIMESTAMP`** — Postgres's
+  `CURRENT_TIMESTAMP` is `timestamptz`; defaulting a `text` column to it is
+  a type error there (SQLite has no such type-checking). Postgres gets an
+  explicit cast/format instead, via `currentTimestampDefault()`, producing
+  the same UTC millisecond ISO-8601 shape every repository already writes
+  via `new Date().toISOString()` on explicit insert.
+
+Separately, every money/quantity column was moved from Kysely's generic
+`'real'` type to `'double precision'`: SQLite's `REAL` storage class is
+already an 8-byte IEEE double, but Postgres's native `real` is 4-byte
+single precision — `'real'` would have silently lost precision on
+prices/totals/balances under Postgres. `'double precision'` compiles to
+the same SQLite REAL affinity (zero behavior change there) and to genuine
+8-byte precision under Postgres.
+
+`Flag` (0/1) boolean columns were deliberately left as `'integer'` on both
+dialects rather than switched to Postgres's native `boolean` — every
+repository reads/writes them as plain numbers (`types.ts: type Flag =
+number`), and matching Postgres's native boolean would mean touching every
+repository that touches an `is_active`/`is_default`/etc. column, which
+Postgres-compatibility doesn't actually require.
 
 **Migrations**: `src/main/db/migrations/0001_*.ts` … `0014_*.ts`, each
 exporting `up()`/`down()`, applied in order via Kysely's `Migrator` on every
@@ -245,11 +402,15 @@ law, but that's a policy fact, not something to hard-code).
 
 Everything below is built, tested, and manually verified working end-to-end
 (including through a packaged Windows installer) unless a column says
-otherwise.
+otherwise — **except the Networked-mode row below**, whose code is
+complete and unit-tested against SQLite, but has not yet been run against a
+real Postgres server (no working local Postgres was available in the
+environment this was built in). See §6 for exactly what that means and
+what to verify before relying on it.
 
 | Module | Status | Notes |
 |---|---|---|
-| Database schema/migrations | Done | 14 migrations, see §4 |
+| Database schema/migrations | Done | 14 migrations, see §4; dialect-compatible with Postgres (not yet verified live — see above) |
 | Inventory | Done | Items (`books` table internally), categories, stock adjustments, stock take sessions. UI labels read "Item(s)" rather than "Book(s)" (values only — internal `books` table/repository/IPC names are unchanged); items have an optional `brand` text field, form-only (not shown in the items table). Duplicate barcode/ISBN on create or update is caught before the write (`assertNoDuplicateCodes()` in `booksRepository.ts`) and surfaced as `DUPLICATE_BARCODE`/`DUPLICATE_ISBN` in the form's error banner, instead of a raw SQLite UNIQUE-constraint error falling through to the generic "Something went wrong" message |
 | Sales/Billing | Done | Cart, hold/resume, split payments (cash/card/mobile wallet/credit/other), receipts (screen, PDF export, thermal print). Scanning/searching a barcode opens a Qty modal (auto-focused, pre-selected, defaults to 1) instead of adding directly; confirming adds the entered quantity to the cart, incrementing an existing line for that item rather than creating a duplicate — this applies to both barcode-scan/Enter and manually clicking a search result. The barcode-scan → qty-modal cart UI is shared with Quotations via `src/renderer/src/components/ItemSearchCart/ItemSearchCart.tsx` (and customer lookup via `components/CustomerSelect/`), not duplicated per page. Receipts print the shop's business-profile header (name/address/phone/email, from Settings — see below) and can be exported as A4, A5, or the original 80mm-thermal-shaped PDF, chosen per export in `ReceiptModal.tsx` (`buildReceiptHtml`/`renderReceiptPdf` both take a `paperSize` — no persisted default setting exists for this yet, it's a per-print choice defaulting to 80mm) |
 | Quotations | Done | A separate top-level module for issuing price estimates (`quote_no` format `QUO-YYYY-NNNNNN`) that take no payment and never touch stock at creation — `createQuotation()` stores a plain-sum estimate (no discounts/tax computed), matching how `holdSale()` already behaves. Converting a quotation to a real sale (`convertQuotationToSale()`) is the only place stock moves: it composes with `checkoutSaleWithTrx()` (the transaction-accepting core of `salesRepository.ts`'s checkout, split out from the public `checkoutSale()` specifically to support this) inside one transaction, so the quotation's status flip to `'converted'` and the resulting sale/stock-deduction commit or roll back together — real pricing (discounts/combos/tax) is computed fresh at conversion, not trusted from the quotation's estimate. A voided or already-converted quotation can't be converted or voided again. Printing reuses the same receipt pipeline as Sales (`documentType: 'invoice' \| 'quotation'` on `ReceiptData`), labeled "Quotation" with a "not a tax invoice" disclaimer and the valid-until date instead of an invoice heading. `quotations:convertToSale`/`quotations:void` are intentionally unguarded (no `withRole`), matching `sales:checkout`'s own precedent as a core cashier action |
@@ -258,9 +419,10 @@ otherwise.
 | Returns | Done | Approval-threshold gating, atomic stock-back-in + credit clawback for credit-paid sales |
 | Reports | Done | Sales summary, best/slow sellers, profit & loss, grouped by category/author/supplier/cashier; PDF + Excel export. Supplier attribution is a documented heuristic ("most recent GRN per book"), not a guaranteed per-sale record — labelled as such in the UI |
 | User Management / RBAC / Login | Done | 3 roles, bcrypt-hashed passwords, idle auto-lock, per-user language preference |
-| Backup & Recovery | Done | Manual + scheduled backups (retention-pruned), restore-from-file with validation, relaunches the app after restore |
+| Backup & Recovery | Done | Manual + scheduled backups (retention-pruned), restore-from-file with validation, relaunches the app after restore. Standalone: SQLite file copy, unchanged. Networked: `pg_dump`/`pg_restore` child processes against the configured server instead (`postgresBackupService.ts`) — same buttons/UX, sharing the same folder/list/retention code, but requires the PostgreSQL client tools installed on whichever PC clicks Backup/Restore (a new dependency the file-copy path never had — see §6) |
 | Audit Log | Done | Filterable/paginated viewer over `audit_log`, joined with the acting user |
-| Settings | Done | Per-user language switcher (`src/renderer/src/pages/Settings/SettingsPage.tsx`; the persisted-language feature itself is covered under User Management above); a Profile Data section (business name/phone/email/address) viewable by every role but editable only by admin/manager (`withRole(['admin','manager'])` on `settings:profile:set`), stored via the same generic `settings` key-value table as backup/idle-timeout config (`profile.*` keys, `getBusinessProfile()`/`setBusinessProfile()` in `settingsRepository.ts`) and threaded into every printed receipt/quotation header; a static copyright-notice panel (visible to every role, not just admin/manager) sits to the left of these sections in a `.layout`/`.main`/side-panel split matching Sales' `SaleTab.module.css` convention — see the i18n note below for why its text is hard-coded rather than translated |
+| Settings | Done | Per-user language switcher (`src/renderer/src/pages/Settings/SettingsPage.tsx`; the persisted-language feature itself is covered under User Management above); a Profile Data section (business name/phone/email/address) viewable by every role but editable only by admin/manager (`withRole(['admin','manager'])` on `settings:profile:set`), stored via the same generic `settings` key-value table as backup/idle-timeout config (`profile.*` keys, `getBusinessProfile()`/`setBusinessProfile()` in `settingsRepository.ts`) and threaded into every printed receipt/quotation header; a static copyright-notice panel (visible to every role, not just admin/manager) sits to the left of these sections in a `.layout`/`.main`/side-panel split matching Sales' `SaleTab.module.css` convention — see the i18n note below for why its text is hard-coded rather than translated. Admin-only Server Connection section (standalone/networked mode + connection details, test-connection, restart prompt) and Import Existing Data section (one-time SQLite → Postgres migration) — see the Networked / Multi-till row below |
+| Networked / Multi-till | Done (code complete; not yet verified against a real Postgres server — see §6) | Single-shop, LAN-only multi-till support — see §2's "Database mode"/"Startup failure"/"Live connection loss"/"Multi-till concurrency" for the architecture. Covers: Standalone/Networked mode switch with connection test (`ServerConnectionForm.tsx`); a translated startup-failure recovery screen with Retry and in-place connection-fix, reachable with no login (`ServerUnreachableScreen.tsx`); a live "connection lost" banner during normal use that clears itself once the connection recovers (`ConnectionBanner.tsx`); the 14 migrations made Postgres-compatible (`dialectHelpers.ts`); every stock/credit/loyalty/supplier-balance update made race-safe under concurrent tills; `pg_dump`/`pg_restore` backup/restore; and a one-time admin tool to import an existing Standalone shop's SQLite data into a fresh Postgres server, refusing if the destination already has real data (`sqliteToPostgresMigration.ts`) |
 
 **Deferred / not implemented** (no code exists for these — not partially
 built, just not started):
@@ -269,10 +431,17 @@ built, just not started):
   email or SMS. Preorder "Notified" status (`preorders.status`) is a manual
   flag the cashier sets after contacting the customer themselves by phone —
   there's no automated delivery.
-- **Multi-branch/multi-store support.** Out of scope by design — this is a
-  single-shop, single-till app. The Kysely-over-Postgres-dialect choice
-  (§4) is what would make a future server-backed multi-branch version
-  practical without a full data-layer rewrite, but that work hasn't started.
+- **Multi-branch/multi-store support.** Still out of scope by design, even
+  after adding Networked mode. Networked mode is one shop's tills sharing
+  one database on their own LAN — it has no concept of a second shop, a
+  second location, or syncing between separate servers. There's also no
+  `till_id`-style column anywhere recording which physical till a given
+  sale/action came from (nothing asked for one, but it means per-till
+  reporting isn't possible today if that's ever wanted), and
+  `register_closings` has no unique constraint on `business_date`, so two
+  tills closing the register the same day create two rows rather than one
+  being rejected — may be intentional per-till reconciliation, may not be;
+  worth a decision if it comes up.
 
 **Manual testing still worth doing periodically:**
 
@@ -280,6 +449,11 @@ built, just not started):
   unit-tested since no physical printer exists in the dev environment).
 - A full backup → restore cycle against a real installed copy, not just the
   dev database.
+- **Everything Networked-mode, against a real Postgres server** (see §6):
+  the full migration chain, live multi-till concurrency (the
+  `TEST_POSTGRES_URL`-gated tests in `tests/integration/` cover this but
+  have not actually been run), a real `pg_dump`/`pg_restore` round-trip,
+  and the one-time SQLite → Postgres data import.
 
 ## 6. Known issues & constraints
 
@@ -344,6 +518,32 @@ built, just not started):
   this writing — anything deferred is listed explicitly above instead of
   left as an inline marker. If you add a `TODO`, please also add a line
   here (or resolve it before it lands).
+- **None of the Networked-mode (Postgres) code has been run against a real
+  Postgres server yet.** It was written and reviewed carefully (including
+  reading Kysely's own compiler source for the dialect-compatibility fixes
+  in §4), and every SQLite-path test still passes unchanged, but neither
+  Docker Desktop nor a native Windows PostgreSQL install could be gotten to
+  a reachable, working state in the environment this was built in — see
+  the git history around each Networked-mode commit for the specifics.
+  Concretely, before relying on this in a real shop: run
+  `TEST_POSTGRES_URL=postgres://user:pass@host:5432/db npm test` (this
+  activates `tests/integration/*.test.ts`, which self-skip otherwise) and
+  manually walk through Settings → Server Connection, the startup-failure
+  screen (point a till at a wrong IP), a `pg_dump`/`pg_restore` backup and
+  restore, and the data-migration tool, on an actual multi-till LAN setup.
+- **`app-config.json` stores the Postgres password in plain text** (in the
+  userData folder, alongside — not inside — the database). This matches
+  what was asked for ("a small local config file... written via plain fs,
+  not through the DB") and is consistent with this being a trusted,
+  single-shop internal tool rather than a multi-tenant service, but it's
+  worth knowing plainly rather than discovering by reading the file.
+- **`pg_dump`/`pg_restore` are a new external dependency Networked-mode
+  backup introduces** — see the Backup & Recovery row in §5. Whichever PC
+  clicks "Backup Now" or "Restore" needs the PostgreSQL client tools
+  installed and on its own PATH; the server machine already has them
+  (Postgres itself needs them), but that's irrelevant since these run as
+  child processes on the till, connecting over the network like any other
+  client — nothing is executed on the server itself.
 
 ## 7. How to run things
 
@@ -376,6 +576,21 @@ Electron-built native module the real app uses.
    to be a workaround for an unrelated code-signing-tool download issue
    that's since been eliminated from the config.
 
+**Testing against real Postgres**: `tests/integration/*.test.ts` (migration
+compatibility, multi-till concurrency, and the SQLite → Postgres data
+import) are opt-in — they self-skip with a console warning unless
+`TEST_POSTGRES_URL` is set to a connection string for a database that's
+safe to wipe (each one drops and recreates the `public` schema before
+running):
+
+```
+TEST_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/lankapos_test npm test
+```
+
+`npm test` on its own (no env var) only ever exercises the SQLite path, on
+purpose — see §6 for why none of the Postgres path has been verified live
+yet.
+
 ## 8. How to extend safely
 
 Adding a new IPC-backed feature end-to-end, following the pattern the rest
@@ -388,7 +603,18 @@ of the app already uses:
    in `db.transaction().execute(trx => ...)`. Call `recordAudit()`
    (`src/main/db/audit.ts`) after every create/update, matching the
    `{userId, action, entityType, entityId, before?, after?}` shape used
-   elsewhere.
+   elsewhere. If the write adjusts a shared numeric column (a balance, a
+   quantity, a running total), use a single atomic guarded `UPDATE` —
+   `.set((eb) => ({col: eb('col', '+', delta)}))` with the validation
+   guard in the same statement's `WHERE` clause — not a
+   read-then-compute-then-write, which races under multi-till Postgres even
+   inside one transaction (see §2's "Multi-till concurrency" and
+   `stockRepository.ts`'s `adjustStockWithTrx()`).
+   If the domain needs a new migration, see §4's "Migration dialect
+   compatibility" for the two spots (auto-increment ids,
+   `CURRENT_TIMESTAMP` defaults) that need `dialectHelpers.ts`'s helpers
+   rather than plain Kysely calls, and use `'double precision'` rather than
+   `'real'` for any new money/quantity column.
 3. **IPC handler** — add a channel in `src/main/ipc/<domain>.ts` (or create
    the file + a `registerXIpc(db)` export, then wire it into
    `src/main/index.ts`). Name the channel `<domain>:<action>`. Wrap it in

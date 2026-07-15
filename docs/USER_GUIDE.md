@@ -239,7 +239,15 @@ automatically the next time they sign in.
   taking a fresh backup of the current state first.
 
 Back up regularly. This is the only safety net if something goes wrong —
-there's no cloud copy since the app works fully offline.
+there's no cloud copy, and Standalone mode works fully offline.
+
+**If this till is in Networked mode** (§14), this screen looks and behaves
+identically, but backup/restore work by connecting to the shared server
+instead of copying a local file — you'll see a note about this on the page
+itself. The one thing this changes for you: the PostgreSQL client tools
+need to be installed on **this PC** (the one clicking Backup Now/Restore),
+not the server — see §14.5. If Backup Now fails with a message about a
+tool not being found, that's what it means.
 
 ## 12. Settings
 
@@ -253,6 +261,13 @@ Reachable by everyone, though only admin/manager can change most of it.
   separate from the receipt-language setting (which an admin controls
   elsewhere) — a shop can run the app in English while always printing
   Sinhala receipts, or vice versa.
+- **Server Connection** (admin only): switch this till between Standalone
+  and Networked mode, and enter/test the shared server's connection
+  details. See §14 for the full setup walkthrough — this is where you
+  point each till at the server once it's ready.
+- **Import Existing Data** (admin only, Networked mode only): the one-time
+  tool for bringing an existing Standalone shop's data onto a freshly set
+  up server. See §14.6.
 - A software copyright notice is shown alongside these, visible to every
   role. It's informational only — nothing to configure there.
 
@@ -261,6 +276,125 @@ Reachable by everyone, though only admin/manager can change most of it.
 A searchable, filterable record of every create/update made anywhere in
 the system, who did it, and when. Use it to answer "who changed this and
 when" questions — it's append-only and can't be edited or cleared.
+
+## 14. Networked Setup (Multi-Till)
+
+If your shop has more than one till (checkout PC) and you want them all to
+share the same inventory, sales, and customer data in real time, this
+section walks through setting that up. If you only have one till, you can
+skip this entirely — Standalone mode (the default) works exactly as
+described everywhere above, with no server and no network required.
+
+### 14.1 What this is, in plain terms
+
+Right now (Standalone mode), everything lives in a file on one PC. In
+Networked mode, that data instead lives on one dedicated server PC, and
+every till (including that same PC, if you want) connects to it over your
+shop's own network. Every till then sees the same stock levels, the same
+customer accounts, the same sales — a sale rung up on one till instantly
+affects what another till sees.
+
+This is still just for **one shop on one network** — it doesn't connect
+separate shop locations together, and it needs all the tills and the
+server to be reachable on the same local network (Wi-Fi or wired), not
+over the internet.
+
+### 14.2 Set up the server PC
+
+Pick one PC to be the dedicated server. It should:
+
+- Stay switched on and connected to the network whenever any till needs to
+  work (if it's off, every till shows a "can't reach the server" screen —
+  see §14.4).
+- Not need to be a till itself, though it's allowed to be — a small shop
+  might just designate its back-office PC.
+
+On that PC:
+
+1. **Install PostgreSQL.** Download the installer from
+   [postgresql.org](https://www.postgresql.org/download/windows/) and run
+   it. During setup, you'll be asked to set a password for the `postgres`
+   user — **write this down**, you'll need it in step 14.3. Keep the
+   default port, **5432**.
+2. **Open the firewall for port 5432**, so the other tills can reach it:
+   - Open **Windows Defender Firewall with Advanced Security** (search for
+     it in the Start menu).
+   - Click **Inbound Rules** → **New Rule...**
+   - Choose **Port** → **TCP** → enter **5432** → **Allow the connection**
+     → apply it to all profiles → give it a name like "LankaPOS Postgres".
+3. **Find this PC's IP address** — open a Command Prompt and run
+   `ipconfig`, then note the **IPv4 Address** (something like
+   `192.168.1.10`). You'll enter this on every till in the next step.
+
+### 14.3 Point each till at the server
+
+On every till PC (including the server PC itself, if it's also used as a
+till):
+
+1. Sign in as an admin and go to **Settings → Server Connection**.
+2. Switch the mode from **Standalone** to **Networked**.
+3. Fill in:
+   - **Server address**: the IP address from step 14.2 (e.g. `192.168.1.10`)
+   - **Port**: `5432` (leave as default unless you changed it)
+   - **Database name**: any name you'd like LankaPOS to use on the server —
+     use the same name on every till
+   - **Username**: `postgres`
+   - **Password**: the password you set in step 14.2
+4. Click **Test Connection** — it should report success. If it doesn't,
+   double check the IP address, that the server PC is switched on, and the
+   firewall step above.
+5. Click **Save**, then **Restart Now** when prompted. The till reconnects
+   using the new settings.
+
+The very first till to connect in Networked mode sets up the server's
+database structure automatically — you don't need to do anything extra for
+that.
+
+### 14.4 What a till shows if it can't reach the server
+
+If a till starts up and can't reach the configured server at all (wrong
+IP, server switched off, network cable unplugged, firewall blocking it),
+it shows a clear "Can't reach the server" screen instead of a blank or
+frozen window — with a **Retry** button, and a **Fix Connection Settings**
+link to correct a typo right there without needing to know how to edit any
+files by hand.
+
+If the connection drops while a till is already running and in use (a
+brief network hiccup, the server restarting), a banner appears at the top
+of the screen saying the connection was lost and it's reconnecting. The
+till simply can't complete an action (like a sale) while disconnected —
+there's no working offline and syncing up later — but as soon as the
+server is reachable again, the banner clears on its own and the till works
+normally.
+
+### 14.5 Backup & Recovery in Networked mode
+
+Backup & Recovery (§11) looks and works the same from this screen, but
+needs the **PostgreSQL client tools** installed on whichever PC actually
+clicks "Backup Now" or "Restore" (not necessarily the server — any till
+can do it, as long as that PC has the tools). Installing PostgreSQL there
+too (step 14.2) is the simplest way to get them. If a backup fails with a
+message about a missing tool, that's what it's asking for.
+
+### 14.6 Moving an existing shop's data onto the new server
+
+If you're switching a shop that's already been using LankaPOS in
+Standalone mode (with real items, customers, sales history) over to
+Networked mode, you don't have to start over. After completing 14.2 and
+14.3 on the till that has the existing data:
+
+1. Go to **Settings → Import Existing Data** (only visible once that till
+   is in Networked mode).
+2. Click **Choose SQLite File** — it suggests the till's own existing
+   database by default, or pick a backup `.db` file instead.
+3. Click **Import Data**, confirm, and wait — it reports how many rows it
+   imported per table when done, so you can sanity-check the numbers
+   against what you had before.
+
+This only works **once**, against a server with no real data on it yet —
+running it a second time (or against a server that already has other
+data) is refused, to avoid creating duplicates. Do this right after
+setting up the server, before any till starts using it for real sales.
 
 ## Tips & things worth knowing
 
@@ -279,5 +413,8 @@ when" questions — it's append-only and can't be edited or cleared.
 - **Nothing here calls or emails anyone automatically.** Preorder
   notifications and anything similar are manual steps you do yourself by
   phone — there's no automated messaging built in.
-- **This is a single-till, single-shop tool.** It doesn't support multiple
-  branches or tills sharing one database over a network.
+- **This is a single-shop tool** — it doesn't support multiple branches or
+  locations syncing together. It *can* run as several tills in the same
+  shop sharing one set of data over your own network (Networked mode) —
+  see §14 if that's what you need; a single till (Standalone mode, the
+  default) works exactly as described everywhere above either way.
