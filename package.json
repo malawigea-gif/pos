@@ -17,8 +17,8 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
-    "appId": "com.lankapos.app",
-    "productName": "LankaPOS",
+    "appId": "com.posnet.app",
+    "productName": "Posnet",
     "directories": {
       "output": "dist"
     },
@@ -42,7 +42,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "LankaPOS"
+      "shortcutName": "Posnet"
     }
   },
   "dependencies": {
