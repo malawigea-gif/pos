@@ -15,6 +15,7 @@ import { AuditLogPage } from './pages/AuditLog/AuditLogPage'
 import { LoginScreen } from './session/LoginScreen'
 import { LockScreen } from './session/LockScreen'
 import { ServerUnreachableScreen } from './session/ServerUnreachableScreen'
+import { ConnectionBanner } from './components/ConnectionBanner/ConnectionBanner'
 import { useSession } from './session/SessionContext'
 import { useIdleLock } from './session/useIdleLock'
 import { setLanguage } from './i18n'
@@ -90,36 +91,42 @@ function App(): JSX.Element {
     setSession(current)
   }
 
-  if (!startupStatus) return <></>
-
-  if (!startupStatus.ok) return <ServerUnreachableScreen status={startupStatus} />
-
-  if (checkingSession) return <></>
-
-  if (!session) {
-    return <LoginScreen onLoggedIn={handleLoggedIn} />
-  }
-
-  if (session.locked) {
-    return <LockScreen fullName={session.fullName} onUnlocked={handleUnlocked} />
+  let content: JSX.Element
+  if (!startupStatus) {
+    content = <></>
+  } else if (!startupStatus.ok) {
+    content = <ServerUnreachableScreen status={startupStatus} />
+  } else if (checkingSession) {
+    content = <></>
+  } else if (!session) {
+    content = <LoginScreen onLoggedIn={handleLoggedIn} />
+  } else if (session.locked) {
+    content = <LockScreen fullName={session.fullName} onUnlocked={handleUnlocked} />
+  } else {
+    content = (
+      <div>
+        <TopBar currentPage={page} onNavigate={setPage} />
+        {page === 'sales' && <SalesPage />}
+        {page === 'quotations' && <QuotationsPage />}
+        {page === 'inventory' && <InventoryPage />}
+        {page === 'customers' && <CustomersPage />}
+        {page === 'suppliers' && <SuppliersPage />}
+        {page === 'pricing' && <PricingPage />}
+        {page === 'reports' && <ReportsPage />}
+        {page === 'returns' && <ReturnsPage />}
+        {page === 'users' && <UsersPage />}
+        {page === 'backup' && <BackupPage />}
+        {page === 'auditLog' && <AuditLogPage />}
+        {page === 'settings' && <SettingsPage />}
+      </div>
+    )
   }
 
   return (
-    <div>
-      <TopBar currentPage={page} onNavigate={setPage} />
-      {page === 'sales' && <SalesPage />}
-      {page === 'quotations' && <QuotationsPage />}
-      {page === 'inventory' && <InventoryPage />}
-      {page === 'customers' && <CustomersPage />}
-      {page === 'suppliers' && <SuppliersPage />}
-      {page === 'pricing' && <PricingPage />}
-      {page === 'reports' && <ReportsPage />}
-      {page === 'returns' && <ReturnsPage />}
-      {page === 'users' && <UsersPage />}
-      {page === 'backup' && <BackupPage />}
-      {page === 'auditLog' && <AuditLogPage />}
-      {page === 'settings' && <SettingsPage />}
-    </div>
+    <>
+      <ConnectionBanner />
+      {content}
+    </>
   )
 }
 

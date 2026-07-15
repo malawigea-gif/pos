@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { decodeIpcError } from '../shared/errors'
 import type {
   AdjustStockRequest,
   Book,
@@ -94,241 +95,280 @@ import type {
 } from '../shared/quotations'
 import type { AppConfig, ConnectionTestResult, NetworkedDbConfig, StartupStatus } from '../shared/appConfig'
 
+type ConnectionStatusListener = (status: { lost: boolean }) => void
+const connectionStatusListeners = new Set<ConnectionStatusListener>()
+let lastKnownConnectionLost = false
+
+function notifyConnectionStatus(lost: boolean): void {
+  if (lost === lastKnownConnectionLost) return
+  lastKnownConnectionLost = lost
+  for (const listener of connectionStatusListeners) listener({ lost })
+}
+
+// Every window.api.* method goes through this instead of calling
+// ipcRenderer.invoke() directly (see the renderer/main "Networked mode
+// connection loss" handling — PROJECT_OVERVIEW.md §2): a successful call
+// clears the global "connection lost" banner, and a CONNECTION_LOST-coded
+// failure (from ipc/errors.ts's toIpcError() on the main side) raises it,
+// regardless of which of the ~150 channels below happened to be the one
+// that failed. Untyped (matches ipcRenderer.invoke's own `Promise<any>`)
+// so every existing call site's own `(): Promise<X> =>` annotation keeps
+// providing its return type, same as before this wrapper existed.
+function invoke(channel: string, ...args: unknown[]): Promise<any> {
+  return ipcRenderer.invoke(channel, ...args).then(
+    (result) => {
+      notifyConnectionStatus(false)
+      return result
+    },
+    (error: unknown) => {
+      if (decodeIpcError(error).code === 'CONNECTION_LOST') notifyConnectionStatus(true)
+      throw error
+    }
+  )
+}
+
 const api = {
   app: {
     version: process.env['npm_package_version'] ?? 'dev'
   },
   inventory: {
     listBooks: (filter?: ListBooksFilter): Promise<Book[]> =>
-      ipcRenderer.invoke('inventory:books:list', filter),
-    getBook: (id: number): Promise<Book | undefined> => ipcRenderer.invoke('inventory:books:get', id),
-    listLowStockBooks: (): Promise<Book[]> => ipcRenderer.invoke('inventory:books:lowStock'),
+      invoke('inventory:books:list', filter),
+    getBook: (id: number): Promise<Book | undefined> => invoke('inventory:books:get', id),
+    listLowStockBooks: (): Promise<Book[]> => invoke('inventory:books:lowStock'),
     createBook: (input: CreateBookFormInput): Promise<Book> =>
-      ipcRenderer.invoke('inventory:books:create', input),
+      invoke('inventory:books:create', input),
     updateBook: (id: number, input: BookFormInput): Promise<Book> =>
-      ipcRenderer.invoke('inventory:books:update', id, input),
+      invoke('inventory:books:update', id, input),
     setBookActive: (id: number, isActive: boolean): Promise<Book> =>
-      ipcRenderer.invoke('inventory:books:setActive', id, isActive),
-    listCategories: (): Promise<Category[]> => ipcRenderer.invoke('inventory:categories:list'),
+      invoke('inventory:books:setActive', id, isActive),
+    listCategories: (): Promise<Category[]> => invoke('inventory:categories:list'),
     adjustStock: (input: AdjustStockRequest): Promise<void> =>
-      ipcRenderer.invoke('inventory:stock:adjust', input),
+      invoke('inventory:stock:adjust', input),
     getStockHistory: (bookId: number): Promise<StockMovement[]> =>
-      ipcRenderer.invoke('inventory:stock:history', bookId),
+      invoke('inventory:stock:history', bookId),
     startStockTake: (categoryId?: number): Promise<StockTake> =>
-      ipcRenderer.invoke('inventory:stockTake:start', categoryId),
+      invoke('inventory:stockTake:start', categoryId),
     getCurrentStockTake: (): Promise<StockTake | undefined> =>
-      ipcRenderer.invoke('inventory:stockTake:current'),
+      invoke('inventory:stockTake:current'),
     listStockTakeItems: (stockTakeId: number): Promise<StockTakeItemView[]> =>
-      ipcRenderer.invoke('inventory:stockTake:listItems', stockTakeId),
+      invoke('inventory:stockTake:listItems', stockTakeId),
     recordStockTakeCount: (itemId: number, countedQty: number): Promise<void> =>
-      ipcRenderer.invoke('inventory:stockTake:recordCount', itemId, countedQty),
+      invoke('inventory:stockTake:recordCount', itemId, countedQty),
     completeStockTake: (stockTakeId: number): Promise<StockTake> =>
-      ipcRenderer.invoke('inventory:stockTake:complete', stockTakeId)
+      invoke('inventory:stockTake:complete', stockTakeId)
   },
   sales: {
-    hold: (input: HoldSaleRequest): Promise<Sale> => ipcRenderer.invoke('sales:hold', input),
-    listHeld: (): Promise<Sale[]> => ipcRenderer.invoke('sales:listHeld'),
+    hold: (input: HoldSaleRequest): Promise<Sale> => invoke('sales:hold', input),
+    listHeld: (): Promise<Sale[]> => invoke('sales:listHeld'),
     getWithItems: (saleId: number): Promise<SaleWithItems | undefined> =>
-      ipcRenderer.invoke('sales:getWithItems', saleId),
-    search: (filter?: SaleSearchFilter): Promise<Sale[]> => ipcRenderer.invoke('sales:search', filter),
-    checkout: (input: CheckoutRequest): Promise<ReceiptData> => ipcRenderer.invoke('sales:checkout', input),
+      invoke('sales:getWithItems', saleId),
+    search: (filter?: SaleSearchFilter): Promise<Sale[]> => invoke('sales:search', filter),
+    checkout: (input: CheckoutRequest): Promise<ReceiptData> => invoke('sales:checkout', input),
     getReceiptData: (saleId: number, uiLanguage: ReceiptLanguage): Promise<ReceiptData | undefined> =>
-      ipcRenderer.invoke('sales:getReceiptData', saleId, uiLanguage),
+      invoke('sales:getReceiptData', saleId, uiLanguage),
     exportReceiptPdf: (data: ReceiptData, paperSize?: ReceiptPaperSize): Promise<string | null> =>
-      ipcRenderer.invoke('sales:exportReceiptPdf', data, paperSize),
+      invoke('sales:exportReceiptPdf', data, paperSize),
     printReceiptThermal: (data: ReceiptData): Promise<void> =>
-      ipcRenderer.invoke('sales:printReceiptThermal', data)
+      invoke('sales:printReceiptThermal', data)
   },
   register: {
     summary: (businessDate: string): Promise<RegisterCashSummary> =>
-      ipcRenderer.invoke('register:summary', businessDate),
+      invoke('register:summary', businessDate),
     close: (input: CreateRegisterClosingRequest): Promise<RegisterClosing> =>
-      ipcRenderer.invoke('register:close', input),
-    list: (): Promise<RegisterClosing[]> => ipcRenderer.invoke('register:list')
+      invoke('register:close', input),
+    list: (): Promise<RegisterClosing[]> => invoke('register:list')
   },
   customers: {
     list: (filter?: ListCustomersFilter): Promise<Customer[]> =>
-      ipcRenderer.invoke('customers:list', filter),
-    get: (id: number): Promise<Customer | undefined> => ipcRenderer.invoke('customers:get', id),
-    create: (input: CustomerFormInput): Promise<Customer> => ipcRenderer.invoke('customers:create', input),
+      invoke('customers:list', filter),
+    get: (id: number): Promise<Customer | undefined> => invoke('customers:get', id),
+    create: (input: CustomerFormInput): Promise<Customer> => invoke('customers:create', input),
     update: (id: number, input: CustomerFormInput): Promise<Customer> =>
-      ipcRenderer.invoke('customers:update', id, input),
+      invoke('customers:update', id, input),
     recordCreditPayment: (input: RecordCreditPaymentRequest): Promise<Customer> =>
-      ipcRenderer.invoke('customers:recordCreditPayment', input),
+      invoke('customers:recordCreditPayment', input),
     adjustLoyaltyPoints: (input: AdjustLoyaltyPointsRequest): Promise<number> =>
-      ipcRenderer.invoke('customers:adjustLoyaltyPoints', input),
+      invoke('customers:adjustLoyaltyPoints', input),
     listLoyaltyTransactions: (customerId: number): Promise<LoyaltyTransaction[]> =>
-      ipcRenderer.invoke('customers:listLoyaltyTransactions', customerId)
+      invoke('customers:listLoyaltyTransactions', customerId)
   },
   suppliers: {
     list: (filter?: ListSuppliersFilter): Promise<Supplier[]> =>
-      ipcRenderer.invoke('suppliers:list', filter),
-    get: (id: number): Promise<Supplier | undefined> => ipcRenderer.invoke('suppliers:get', id),
-    create: (input: SupplierFormInput): Promise<Supplier> => ipcRenderer.invoke('suppliers:create', input),
+      invoke('suppliers:list', filter),
+    get: (id: number): Promise<Supplier | undefined> => invoke('suppliers:get', id),
+    create: (input: SupplierFormInput): Promise<Supplier> => invoke('suppliers:create', input),
     update: (id: number, input: SupplierFormInput): Promise<Supplier> =>
-      ipcRenderer.invoke('suppliers:update', id, input),
+      invoke('suppliers:update', id, input),
     createPayment: (input: CreateSupplierPaymentRequest): Promise<SupplierPayment> =>
-      ipcRenderer.invoke('suppliers:payments:create', input),
+      invoke('suppliers:payments:create', input),
     markPaymentPaid: (paymentId: number): Promise<SupplierPayment> =>
-      ipcRenderer.invoke('suppliers:payments:markPaid', paymentId),
+      invoke('suppliers:payments:markPaid', paymentId),
     listPayments: (filter?: ListSupplierPaymentsFilter): Promise<SupplierPayment[]> =>
-      ipcRenderer.invoke('suppliers:payments:list', filter)
+      invoke('suppliers:payments:list', filter)
   },
   purchasing: {
     createPurchaseOrder: (input: CreatePurchaseOrderRequest): Promise<PurchaseOrder> =>
-      ipcRenderer.invoke('purchaseOrders:create', input),
+      invoke('purchaseOrders:create', input),
     listPurchaseOrders: (options?: {
       supplierId?: number
       status?: PurchaseOrderStatus
-    }): Promise<PurchaseOrder[]> => ipcRenderer.invoke('purchaseOrders:list', options),
+    }): Promise<PurchaseOrder[]> => invoke('purchaseOrders:list', options),
     getPurchaseOrderWithItems: (
       id: number
     ): Promise<{ po: PurchaseOrder; items: PurchaseOrderItemView[] } | undefined> =>
-      ipcRenderer.invoke('purchaseOrders:getWithItems', id),
+      invoke('purchaseOrders:getWithItems', id),
     updatePurchaseOrderStatus: (id: number, status: PurchaseOrderStatus): Promise<PurchaseOrder> =>
-      ipcRenderer.invoke('purchaseOrders:updateStatus', id, status),
-    createGrn: (input: CreateGrnRequest): Promise<Grn> => ipcRenderer.invoke('grn:create', input),
-    listGrns: (supplierId?: number): Promise<Grn[]> => ipcRenderer.invoke('grn:list', supplierId),
+      invoke('purchaseOrders:updateStatus', id, status),
+    createGrn: (input: CreateGrnRequest): Promise<Grn> => invoke('grn:create', input),
+    listGrns: (supplierId?: number): Promise<Grn[]> => invoke('grn:list', supplierId),
     getGrnWithItems: (id: number): Promise<{ grn: Grn; items: GrnItemView[] } | undefined> =>
-      ipcRenderer.invoke('grn:getWithItems', id)
+      invoke('grn:getWithItems', id)
   },
   preorders: {
     create: (input: CreatePreorderRequest): Promise<Preorder> =>
-      ipcRenderer.invoke('preorders:create', input),
+      invoke('preorders:create', input),
     list: (filter?: ListPreordersFilter): Promise<PreorderView[]> =>
-      ipcRenderer.invoke('preorders:list', filter),
+      invoke('preorders:list', filter),
     updateStatus: (id: number, status: PreorderStatus): Promise<Preorder> =>
-      ipcRenderer.invoke('preorders:updateStatus', id, status)
+      invoke('preorders:updateStatus', id, status)
   },
   pricing: {
-    listTaxRates: (): Promise<TaxRate[]> => ipcRenderer.invoke('pricing:taxRates:list'),
+    listTaxRates: (): Promise<TaxRate[]> => invoke('pricing:taxRates:list'),
     createTaxRate: (input: TaxRateFormInput): Promise<TaxRate> =>
-      ipcRenderer.invoke('pricing:taxRates:create', input),
+      invoke('pricing:taxRates:create', input),
     updateTaxRate: (id: number, input: TaxRateFormInput): Promise<TaxRate> =>
-      ipcRenderer.invoke('pricing:taxRates:update', id, input),
+      invoke('pricing:taxRates:update', id, input),
     setTaxRateActive: (id: number, isActive: boolean): Promise<TaxRate> =>
-      ipcRenderer.invoke('pricing:taxRates:setActive', id, isActive),
-    listDiscounts: (): Promise<Discount[]> => ipcRenderer.invoke('pricing:discounts:list'),
+      invoke('pricing:taxRates:setActive', id, isActive),
+    listDiscounts: (): Promise<Discount[]> => invoke('pricing:discounts:list'),
     createDiscount: (input: DiscountFormInput): Promise<Discount> =>
-      ipcRenderer.invoke('pricing:discounts:create', input),
+      invoke('pricing:discounts:create', input),
     updateDiscount: (id: number, input: DiscountFormInput): Promise<Discount> =>
-      ipcRenderer.invoke('pricing:discounts:update', id, input),
+      invoke('pricing:discounts:update', id, input),
     setDiscountActive: (id: number, isActive: boolean): Promise<Discount> =>
-      ipcRenderer.invoke('pricing:discounts:setActive', id, isActive),
-    listComboOffers: (): Promise<ComboOffer[]> => ipcRenderer.invoke('pricing:comboOffers:list'),
+      invoke('pricing:discounts:setActive', id, isActive),
+    listComboOffers: (): Promise<ComboOffer[]> => invoke('pricing:comboOffers:list'),
     createComboOffer: (input: ComboOfferFormInput): Promise<ComboOffer> =>
-      ipcRenderer.invoke('pricing:comboOffers:create', input),
+      invoke('pricing:comboOffers:create', input),
     updateComboOffer: (id: number, input: ComboOfferFormInput): Promise<ComboOffer> =>
-      ipcRenderer.invoke('pricing:comboOffers:update', id, input),
+      invoke('pricing:comboOffers:update', id, input),
     setComboOfferActive: (id: number, isActive: boolean): Promise<ComboOffer> =>
-      ipcRenderer.invoke('pricing:comboOffers:setActive', id, isActive)
+      invoke('pricing:comboOffers:setActive', id, isActive)
   },
   reports: {
     salesSummary: (range: DateRange, granularity: SummaryGranularity): Promise<SalesSummaryRow[]> =>
-      ipcRenderer.invoke('reports:salesSummary', range, granularity),
+      invoke('reports:salesSummary', range, granularity),
     bestSellers: (range: DateRange, limit?: number): Promise<BookSalesRow[]> =>
-      ipcRenderer.invoke('reports:bestSellers', range, limit),
+      invoke('reports:bestSellers', range, limit),
     slowMovers: (range: DateRange, limit?: number): Promise<BookSalesRow[]> =>
-      ipcRenderer.invoke('reports:slowMovers', range, limit),
+      invoke('reports:slowMovers', range, limit),
     profitLoss: (range: DateRange): Promise<ProfitLossResult> =>
-      ipcRenderer.invoke('reports:profitLoss', range),
+      invoke('reports:profitLoss', range),
     byCategory: (range: DateRange): Promise<GroupedSalesRow[]> =>
-      ipcRenderer.invoke('reports:byCategory', range),
-    byAuthor: (range: DateRange): Promise<GroupedSalesRow[]> => ipcRenderer.invoke('reports:byAuthor', range),
+      invoke('reports:byCategory', range),
+    byAuthor: (range: DateRange): Promise<GroupedSalesRow[]> => invoke('reports:byAuthor', range),
     bySupplier: (range: DateRange): Promise<GroupedSalesRow[]> =>
-      ipcRenderer.invoke('reports:bySupplier', range),
+      invoke('reports:bySupplier', range),
     byCashier: (range: DateRange): Promise<GroupedSalesRow[]> =>
-      ipcRenderer.invoke('reports:byCashier', range),
-    exportPdf: (spec: ReportTableSpec): Promise<string | null> => ipcRenderer.invoke('reports:exportPdf', spec),
+      invoke('reports:byCashier', range),
+    exportPdf: (spec: ReportTableSpec): Promise<string | null> => invoke('reports:exportPdf', spec),
     exportExcel: (spec: ReportTableSpec): Promise<string | null> =>
-      ipcRenderer.invoke('reports:exportExcel', spec)
+      invoke('reports:exportExcel', spec)
   },
   returns: {
     getReturnableSaleItems: (saleId: number): Promise<ReturnableSaleInfo | undefined> =>
-      ipcRenderer.invoke('returns:getReturnableSaleItems', saleId),
-    create: (input: CreateReturnRequest): Promise<Return> => ipcRenderer.invoke('returns:create', input),
-    approve: (returnId: number): Promise<Return> => ipcRenderer.invoke('returns:approve', returnId),
+      invoke('returns:getReturnableSaleItems', saleId),
+    create: (input: CreateReturnRequest): Promise<Return> => invoke('returns:create', input),
+    approve: (returnId: number): Promise<Return> => invoke('returns:approve', returnId),
     reject: (returnId: number, reason?: string): Promise<Return> =>
-      ipcRenderer.invoke('returns:reject', returnId, reason),
+      invoke('returns:reject', returnId, reason),
     list: (options?: { saleId?: number; status?: ReturnStatus }): Promise<Return[]> =>
-      ipcRenderer.invoke('returns:list', options),
-    listPendingApprovals: (): Promise<Return[]> => ipcRenderer.invoke('returns:listPendingApprovals'),
+      invoke('returns:list', options),
+    listPendingApprovals: (): Promise<Return[]> => invoke('returns:listPendingApprovals'),
     getWithItems: (returnId: number): Promise<{ return: Return; items: ReturnItemView[] } | undefined> =>
-      ipcRenderer.invoke('returns:getWithItems', returnId),
-    getApprovalThreshold: (): Promise<number> => ipcRenderer.invoke('returns:getApprovalThreshold'),
+      invoke('returns:getWithItems', returnId),
+    getApprovalThreshold: (): Promise<number> => invoke('returns:getApprovalThreshold'),
     setApprovalThreshold: (value: number): Promise<void> =>
-      ipcRenderer.invoke('returns:setApprovalThreshold', value)
+      invoke('returns:setApprovalThreshold', value)
   },
   session: {
-    login: (input: LoginRequest): Promise<SessionInfo> => ipcRenderer.invoke('session:login', input),
-    logout: (): Promise<void> => ipcRenderer.invoke('session:logout'),
-    getCurrent: (): Promise<SessionInfo | null> => ipcRenderer.invoke('session:getCurrent'),
-    lock: (): Promise<void> => ipcRenderer.invoke('session:lock'),
-    unlock: (password: string): Promise<void> => ipcRenderer.invoke('session:unlock', password),
-    heartbeat: (): Promise<void> => ipcRenderer.invoke('session:heartbeat'),
+    login: (input: LoginRequest): Promise<SessionInfo> => invoke('session:login', input),
+    logout: (): Promise<void> => invoke('session:logout'),
+    getCurrent: (): Promise<SessionInfo | null> => invoke('session:getCurrent'),
+    lock: (): Promise<void> => invoke('session:lock'),
+    unlock: (password: string): Promise<void> => invoke('session:unlock', password),
+    heartbeat: (): Promise<void> => invoke('session:heartbeat'),
     changeOwnPassword: (currentPassword: string, newPassword: string): Promise<void> =>
-      ipcRenderer.invoke('session:changeOwnPassword', currentPassword, newPassword),
+      invoke('session:changeOwnPassword', currentPassword, newPassword),
     updateOwnLanguage: (language: 'en' | 'si'): Promise<void> =>
-      ipcRenderer.invoke('session:updateOwnLanguage', language),
-    getIdleTimeoutMinutes: (): Promise<number> => ipcRenderer.invoke('session:getIdleTimeoutMinutes'),
+      invoke('session:updateOwnLanguage', language),
+    getIdleTimeoutMinutes: (): Promise<number> => invoke('session:getIdleTimeoutMinutes'),
     setIdleTimeoutMinutes: (minutes: number): Promise<void> =>
-      ipcRenderer.invoke('session:setIdleTimeoutMinutes', minutes)
+      invoke('session:setIdleTimeoutMinutes', minutes)
   },
   users: {
-    list: (): Promise<SafeUser[]> => ipcRenderer.invoke('users:list'),
-    get: (id: number): Promise<SafeUser | undefined> => ipcRenderer.invoke('users:get', id),
-    create: (input: CreateUserRequest): Promise<SafeUser> => ipcRenderer.invoke('users:create', input),
+    list: (): Promise<SafeUser[]> => invoke('users:list'),
+    get: (id: number): Promise<SafeUser | undefined> => invoke('users:get', id),
+    create: (input: CreateUserRequest): Promise<SafeUser> => invoke('users:create', input),
     update: (id: number, input: UpdateUserRequest): Promise<SafeUser> =>
-      ipcRenderer.invoke('users:update', id, input),
+      invoke('users:update', id, input),
     setActive: (id: number, isActive: boolean): Promise<SafeUser> =>
-      ipcRenderer.invoke('users:setActive', id, isActive),
+      invoke('users:setActive', id, isActive),
     resetPassword: (id: number, newPassword: string): Promise<void> =>
-      ipcRenderer.invoke('users:resetPassword', id, newPassword)
+      invoke('users:resetPassword', id, newPassword)
   },
   backup: {
-    getSettings: (): Promise<BackupSettings> => ipcRenderer.invoke('backup:getSettings'),
+    getSettings: (): Promise<BackupSettings> => invoke('backup:getSettings'),
     updateSettings: (input: UpdateBackupSettingsRequest): Promise<BackupSettings> =>
-      ipcRenderer.invoke('backup:updateSettings', input),
-    pickFolder: (): Promise<string | null> => ipcRenderer.invoke('backup:pickFolder'),
-    list: (): Promise<BackupFileInfo[]> => ipcRenderer.invoke('backup:list'),
-    runNow: (): Promise<BackupFileInfo> => ipcRenderer.invoke('backup:runNow'),
-    pickRestoreFile: (): Promise<string | null> => ipcRenderer.invoke('backup:pickRestoreFile'),
-    restore: (filePath: string): Promise<void> => ipcRenderer.invoke('backup:restore', filePath),
-    openFolder: (): Promise<void> => ipcRenderer.invoke('backup:openFolder')
+      invoke('backup:updateSettings', input),
+    pickFolder: (): Promise<string | null> => invoke('backup:pickFolder'),
+    list: (): Promise<BackupFileInfo[]> => invoke('backup:list'),
+    runNow: (): Promise<BackupFileInfo> => invoke('backup:runNow'),
+    pickRestoreFile: (): Promise<string | null> => invoke('backup:pickRestoreFile'),
+    restore: (filePath: string): Promise<void> => invoke('backup:restore', filePath),
+    openFolder: (): Promise<void> => invoke('backup:openFolder')
   },
   audit: {
-    list: (filter?: AuditLogFilter): Promise<AuditLogPage> => ipcRenderer.invoke('audit:list', filter),
-    listEntityTypes: (): Promise<string[]> => ipcRenderer.invoke('audit:listEntityTypes')
+    list: (filter?: AuditLogFilter): Promise<AuditLogPage> => invoke('audit:list', filter),
+    listEntityTypes: (): Promise<string[]> => invoke('audit:listEntityTypes')
   },
   settings: {
-    getProfile: (): Promise<BusinessProfile> => ipcRenderer.invoke('settings:profile:get'),
+    getProfile: (): Promise<BusinessProfile> => invoke('settings:profile:get'),
     setProfile: (input: BusinessProfile): Promise<BusinessProfile> =>
-      ipcRenderer.invoke('settings:profile:set', input)
+      invoke('settings:profile:set', input)
   },
   quotations: {
-    create: (input: CreateQuotationRequest): Promise<Quotation> => ipcRenderer.invoke('quotations:create', input),
-    list: (filter?: ListQuotationsFilter): Promise<Quotation[]> => ipcRenderer.invoke('quotations:list', filter),
+    create: (input: CreateQuotationRequest): Promise<Quotation> => invoke('quotations:create', input),
+    list: (filter?: ListQuotationsFilter): Promise<Quotation[]> => invoke('quotations:list', filter),
     get: (quotationId: number): Promise<QuotationWithItems | undefined> =>
-      ipcRenderer.invoke('quotations:get', quotationId),
+      invoke('quotations:get', quotationId),
     getReceiptData: (quotationId: number, uiLanguage: ReceiptLanguage): Promise<ReceiptData | undefined> =>
-      ipcRenderer.invoke('quotations:getReceiptData', quotationId, uiLanguage),
+      invoke('quotations:getReceiptData', quotationId, uiLanguage),
     void: (quotationId: number, reason?: string): Promise<Quotation> =>
-      ipcRenderer.invoke('quotations:void', quotationId, reason),
+      invoke('quotations:void', quotationId, reason),
     convertToSale: (
       quotationId: number,
       input: ConvertQuotationRequest,
       uiLanguage: ReceiptLanguage
-    ): Promise<ReceiptData> => ipcRenderer.invoke('quotations:convertToSale', quotationId, input, uiLanguage)
+    ): Promise<ReceiptData> => invoke('quotations:convertToSale', quotationId, input, uiLanguage)
   },
   appConfig: {
-    get: (): Promise<AppConfig> => ipcRenderer.invoke('appConfig:get'),
-    set: (input: AppConfig): Promise<void> => ipcRenderer.invoke('appConfig:set', input),
+    get: (): Promise<AppConfig> => invoke('appConfig:get'),
+    set: (input: AppConfig): Promise<void> => invoke('appConfig:set', input),
     testConnection: (config: NetworkedDbConfig): Promise<ConnectionTestResult> =>
-      ipcRenderer.invoke('appConfig:testConnection', config),
-    relaunch: (): Promise<void> => ipcRenderer.invoke('appConfig:relaunch')
+      invoke('appConfig:testConnection', config),
+    relaunch: (): Promise<void> => invoke('appConfig:relaunch')
   },
   system: {
-    getStartupStatus: (): Promise<StartupStatus> => ipcRenderer.invoke('system:getStartupStatus')
+    getStartupStatus: (): Promise<StartupStatus> => invoke('system:getStartupStatus'),
+    ping: (): Promise<void> => invoke('system:ping'),
+    // Returns an unsubscribe function, matching the useEffect cleanup
+    // convention already used throughout the renderer (see useIdleLock.ts).
+    onConnectionStatusChange: (listener: ConnectionStatusListener): (() => void) => {
+      connectionStatusListeners.add(listener)
+      return () => connectionStatusListeners.delete(listener)
+    }
   }
 }
 

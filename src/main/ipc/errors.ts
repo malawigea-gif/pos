@@ -25,9 +25,19 @@ import {
 } from '../db/repositories/usersRepository'
 import { ForbiddenError, NotAuthenticatedError, SessionLockedError, requireRole } from '../auth/session'
 import { InvalidBackupFileError, InvalidBackupSettingsError } from '../backup/backupService'
+import { isConnectionError } from '../db/client-postgres'
 import type { UserRole } from '../db/types'
 
 export function toIpcError(error: unknown): Error {
+  // Checked first and separately from every domain error below: a dropped
+  // Postgres connection isn't a business-rule failure, it's the whole till
+  // being unable to reach the database at all. The renderer treats this
+  // code specially (a global "reconnecting" banner via preload's invoke()
+  // wrapper — see preload/index.ts) instead of showing it as just another
+  // per-screen "Something went wrong".
+  if (isConnectionError(error)) {
+    return encodeIpcError({ code: 'CONNECTION_LOST', message: 'Lost connection to the server.' })
+  }
   if (error instanceof InsufficientStockError) {
     return encodeIpcError({
       code: 'INSUFFICIENT_STOCK',

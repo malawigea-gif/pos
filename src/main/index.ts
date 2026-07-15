@@ -22,6 +22,7 @@ import { runScheduledBackupIfDue } from './backup/backupService'
 import { registerAuditIpc } from './ipc/audit'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerQuotationsIpc } from './ipc/quotations'
+import { registerSystemIpc } from './ipc/system'
 
 const BACKUP_CHECK_INTERVAL_MS = 15 * 60 * 1000
 
@@ -90,6 +91,7 @@ app.whenReady().then(async () => {
     registerAuditIpc(db)
     registerSettingsIpc(db)
     registerQuotationsIpc(db)
+    registerSystemIpc(db)
 
     const defaultBackupFolder = join(app.getPath('userData'), 'backups')
     const checkScheduledBackup = (): void => {

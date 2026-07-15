@@ -12,7 +12,8 @@
     "yes": "Yes",
     "no": "No",
     "loading": "Loading...",
-    "actions": "Actions"
+    "actions": "Actions",
+    "connectionLost": "Connection to server lost — reconnecting..."
   },
   "topbar": {
     "sales": "Sales",
@@ -71,6 +72,7 @@
     }
   },
   "errors": {
+    "CONNECTION_LOST": "Lost connection to the server. Check the network and that the server PC is on, then try again.",
     "INSUFFICIENT_STOCK": "Insufficient stock for this book",
     "DUPLICATE_BARCODE": "This barcode is already used by another item",
     "DUPLICATE_ISBN": "This ISBN is already used by another item",

@@ -51,3 +51,44 @@ export async function testPostgresConnection(config: NetworkedDbConfig): Promise
     await pool.end()
   }
 }
+
+const CONNECTION_ERROR_CODES = new Set([
+  // Node/net-level errors from the underlying socket (server down, firewall,
+  // cable unplugged, DNS failure, etc.)
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  // Postgres SQLSTATE class 08 — Connection Exception
+  '08000',
+  '08001',
+  '08003',
+  '08004',
+  '08006',
+  '08007',
+  '08P01',
+  // Postgres server shutting down (planned restart, crash, admin action)
+  // while a client is still connected
+  '57P01',
+  '57P02',
+  '57P03'
+])
+
+/** Used by ipc/errors.ts's toIpcError() to recognize a dropped/unreachable
+ *  Postgres connection as a distinct CONNECTION_LOST category, separate
+ *  from every other domain error — see errors.ts for why that distinction
+ *  matters to the renderer. better-sqlite3's own errors all carry
+ *  `SQLITE_*` codes, none of which collide with this set, so this check is
+ *  safe to run unconditionally regardless of which dialect is active. */
+export function isConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as NodeJS.ErrnoException).code
+  if (code && CONNECTION_ERROR_CODES.has(code)) return true
+  // pg's own client-side error when an established connection drops
+  // unexpectedly (e.g. the server process is killed) carries no .code at
+  // all — just this message.
+  return error.message.includes('Connection terminated')
+}
