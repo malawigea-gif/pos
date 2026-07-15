@@ -4,6 +4,7 @@ import { setLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../../
 import { TAB_ACCENT_COLORS } from '../../theme/tabColors'
 import { useSession } from '../../session/SessionContext'
 import { useDescribeError } from '../../lib/ipcError'
+import { ServerConnectionForm } from '../../components/ServerConnectionForm/ServerConnectionForm'
 import formStyles from '../../components/Form/formStyles.module.css'
 import tableStyles from '../../components/DataTable/dataTable.module.css'
 import styles from './SettingsPage.module.css'
@@ -163,6 +164,14 @@ export function SettingsPage(): JSX.Element {
               ))}
             </div>
           </section>
+
+          {session?.role === 'admin' && (
+            <section className={styles.section}>
+              <h2 className={styles.sectionTitle}>{t('settings.sections.serverConnection')}</h2>
+              <p className={styles.fieldDescription}>{t('settings.serverConnection.description')}</p>
+              <ServerConnectionForm />
+            </section>
+          )}
         </div>
       </div>
     </div>

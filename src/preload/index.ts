@@ -92,6 +92,7 @@ import type {
   Quotation,
   QuotationWithItems
 } from '../shared/quotations'
+import type { AppConfig, ConnectionTestResult, NetworkedDbConfig, StartupStatus } from '../shared/appConfig'
 
 const api = {
   app: {
@@ -318,6 +319,16 @@ const api = {
       input: ConvertQuotationRequest,
       uiLanguage: ReceiptLanguage
     ): Promise<ReceiptData> => ipcRenderer.invoke('quotations:convertToSale', quotationId, input, uiLanguage)
+  },
+  appConfig: {
+    get: (): Promise<AppConfig> => ipcRenderer.invoke('appConfig:get'),
+    set: (input: AppConfig): Promise<void> => ipcRenderer.invoke('appConfig:set', input),
+    testConnection: (config: NetworkedDbConfig): Promise<ConnectionTestResult> =>
+      ipcRenderer.invoke('appConfig:testConnection', config),
+    relaunch: (): Promise<void> => ipcRenderer.invoke('appConfig:relaunch')
+  },
+  system: {
+    getStartupStatus: (): Promise<StartupStatus> => ipcRenderer.invoke('system:getStartupStatus')
   }
 }
 

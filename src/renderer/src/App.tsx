@@ -14,9 +14,11 @@ import { BackupPage } from './pages/Backup/BackupPage'
 import { AuditLogPage } from './pages/AuditLog/AuditLogPage'
 import { LoginScreen } from './session/LoginScreen'
 import { LockScreen } from './session/LockScreen'
+import { ServerUnreachableScreen } from './session/ServerUnreachableScreen'
 import { useSession } from './session/SessionContext'
 import { useIdleLock } from './session/useIdleLock'
 import { setLanguage } from './i18n'
+import type { StartupStatus } from '@shared/appConfig'
 
 export type AppPage =
   | 'sales'
@@ -37,10 +39,20 @@ function App(): JSX.Element {
   const [page, setPage] = useState<AppPage>('sales')
   const [idleTimeoutMinutes, setIdleTimeoutMinutesState] = useState(15)
   const [checkingSession, setCheckingSession] = useState(true)
+  const [startupStatus, setStartupStatus] = useState<StartupStatus | null>(null)
+
+  useEffect(() => {
+    window.api.system.getStartupStatus().then(setStartupStatus)
+  }, [])
 
   // A session can already exist in main (e.g. a dev hot-reload remounted
   // the renderer) even though this component's local state starts fresh.
+  // Guarded on startupStatus.ok: when the database never connected, none of
+  // the DB-backed IPC channels (including session:getCurrent) were ever
+  // registered in main, so calling this before that's known would just
+  // reject with "no handler registered" — see ServerUnreachableScreen.
   useEffect(() => {
+    if (!startupStatus?.ok) return
     window.api.session.getCurrent().then((current) => {
       if (current) {
         setSession(current)
@@ -48,7 +60,7 @@ function App(): JSX.Element {
       }
       setCheckingSession(false)
     })
-  }, [setSession])
+  }, [setSession, startupStatus])
 
   useEffect(() => {
     if (session) {
@@ -77,6 +89,10 @@ function App(): JSX.Element {
     const current = await window.api.session.getCurrent()
     setSession(current)
   }
+
+  if (!startupStatus) return <></>
+
+  if (!startupStatus.ok) return <ServerUnreachableScreen status={startupStatus} />
 
   if (checkingSession) return <></>
 

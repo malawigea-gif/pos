@@ -1,0 +1,37 @@
+.modeOptions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.modeOptions > button {
+  flex: 1;
+}
+
+.testSuccess {
+  font-size: 13px;
+  color: #1b5e20;
+  background: #e8f5e9;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.restartPrompt {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 16px 0;
+}
+
+.restartPrompt p {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+}

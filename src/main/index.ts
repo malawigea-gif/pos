@@ -1,7 +1,10 @@
-import { app, dialog, shell, BrowserWindow } from 'electron'
+import { app, dialog, ipcMain, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase } from './db'
+import { loadAppConfig } from './config/appConfig'
+import { registerAppConfigIpc } from './ipc/appConfig'
+import type { StartupStatus } from '../shared/appConfig'
 import { registerInventoryIpc } from './ipc/inventory'
 import { registerSalesIpc } from './ipc/sales'
 import { registerRegisterIpc } from './ipc/register'
@@ -59,6 +62,15 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Registered unconditionally, before the database connection is even
+  // attempted: a Networked-mode till that can't reach its server still
+  // needs to read/fix its connection settings from the startup-failure
+  // recovery screen, which by definition has no db and no session yet.
+  registerAppConfigIpc()
+
+  const config = await loadAppConfig(app.getPath('userData'))
+  let startupStatus: StartupStatus
+
   try {
     const { db } = await initDatabase()
     await loadIdleTimeoutSetting(db)
@@ -87,15 +99,32 @@ app.whenReady().then(async () => {
     }
     checkScheduledBackup()
     setInterval(checkScheduledBackup, BACKUP_CHECK_INTERVAL_MS)
+
+    startupStatus = { ok: true, mode: config.mode }
   } catch (error) {
     console.error('[db] failed to initialize database', error)
-    dialog.showErrorBox(
-      'Database error',
-      'LankaPOS could not open its database and must close. If this keeps happening, restore from a backup.'
-    )
-    app.quit()
-    return
+
+    // Standalone's failure modes (a corrupted/inaccessible local file) are
+    // not something a "Retry" button helps with, unlike a Networked-mode
+    // network hiccup — keep this path's existing native-dialog-and-quit
+    // behavior exactly as it was before Networked mode existed.
+    if (config.mode === 'standalone') {
+      dialog.showErrorBox(
+        'Database error',
+        'LankaPOS could not open its database and must close. If this keeps happening, restore from a backup.'
+      )
+      app.quit()
+      return
+    }
+
+    startupStatus = {
+      ok: false,
+      mode: 'networked',
+      error: error instanceof Error ? error.message : String(error)
+    }
   }
+
+  ipcMain.handle('system:getStartupStatus', (): StartupStatus => startupStatus)
 
   createWindow()
 

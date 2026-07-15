@@ -1,19 +1,8 @@
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
+import type { AppConfig } from '../../shared/appConfig'
 
-export type DatabaseMode = 'standalone' | 'networked'
-
-export interface NetworkedDbConfig {
-  host: string
-  port: number
-  database: string
-  user: string
-  password: string
-}
-
-export type AppConfig =
-  | { mode: 'standalone' }
-  | { mode: 'networked'; networked: NetworkedDbConfig }
+export type { AppConfig, DatabaseMode, NetworkedDbConfig } from '../../shared/appConfig'
 
 const STANDALONE_CONFIG: AppConfig = { mode: 'standalone' }
 const CONFIG_FILENAME = 'app-config.json'

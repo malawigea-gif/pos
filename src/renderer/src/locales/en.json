@@ -33,7 +33,8 @@
     "title": "Settings",
     "sections": {
       "language": "Language",
-      "profile": "Profile Data"
+      "profile": "Profile Data",
+      "serverConnection": "Server Connection"
     },
     "language": {
       "label": "Application language",
@@ -48,6 +49,25 @@
       "address": "Address",
       "save": "Save Profile",
       "saved": "Business profile updated."
+    },
+    "serverConnection": {
+      "description": "Standalone keeps everything on this PC. Networked connects this till to a shared server so multiple tills can use the same data — changing this requires a restart.",
+      "mode": {
+        "label": "Database mode",
+        "standalone": "Standalone (this PC only)",
+        "networked": "Networked (shared server)"
+      },
+      "host": "Server address (IP or hostname)",
+      "port": "Port",
+      "database": "Database name",
+      "user": "Username",
+      "password": "Password",
+      "testConnection": "Test Connection",
+      "testing": "Testing...",
+      "testSuccess": "Connected successfully.",
+      "save": "Save",
+      "restartPrompt": "Saved. LankaPOS must restart to connect using these settings.",
+      "restartNow": "Restart Now"
     }
   },
   "errors": {
@@ -639,6 +659,13 @@
     }
   },
   "session": {
+    "serverUnreachable": {
+      "title": "Can't reach the server",
+      "description": "This till is set to Networked mode but couldn't connect to the shared server. Check that the server PC is turned on and reachable on the network, then try again — or fix the connection settings below.",
+      "technicalDetails": "Technical details",
+      "retry": "Retry",
+      "fixSettings": "Fix Connection Settings"
+    },
     "login": {
       "title": "Sign In",
       "username": "Username",
