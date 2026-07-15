@@ -23,6 +23,7 @@ import { registerAuditIpc } from './ipc/audit'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerQuotationsIpc } from './ipc/quotations'
 import { registerSystemIpc } from './ipc/system'
+import { registerMigrationIpc } from './ipc/migration'
 
 const BACKUP_CHECK_INTERVAL_MS = 15 * 60 * 1000
 
@@ -92,6 +93,7 @@ app.whenReady().then(async () => {
     registerSettingsIpc(db)
     registerQuotationsIpc(db)
     registerSystemIpc(db)
+    registerMigrationIpc(db)
 
     const networkedConfig = config.mode === 'networked' ? config.networked : null
     const defaultBackupFolder = join(app.getPath('userData'), 'backups')

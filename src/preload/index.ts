@@ -94,6 +94,7 @@ import type {
   QuotationWithItems
 } from '../shared/quotations'
 import type { AppConfig, ConnectionTestResult, NetworkedDbConfig, StartupStatus } from '../shared/appConfig'
+import type { MigrationRowCounts } from '../shared/migration'
 
 type ConnectionStatusListener = (status: { lost: boolean }) => void
 const connectionStatusListeners = new Set<ConnectionStatusListener>()
@@ -369,6 +370,10 @@ const api = {
       connectionStatusListeners.add(listener)
       return () => connectionStatusListeners.delete(listener)
     }
+  },
+  migration: {
+    pickSourceFile: (): Promise<string | null> => invoke('migration:pickSourceFile'),
+    run: (sourceFilePath: string): Promise<MigrationRowCounts> => invoke('migration:run', sourceFilePath)
   }
 }
 

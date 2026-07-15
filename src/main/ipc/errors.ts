@@ -27,6 +27,10 @@ import { ForbiddenError, NotAuthenticatedError, SessionLockedError, requireRole 
 import { InvalidBackupFileError, InvalidBackupSettingsError } from '../backup/backupService'
 import { InvalidPgBackupFileError, PgBackupFailedError, PgToolNotFoundError } from '../backup/postgresBackupService'
 import { isConnectionError } from '../db/client-postgres'
+import {
+  DestinationNotEmptyError,
+  MigrationRequiresNetworkedModeError
+} from '../migration/sqliteToPostgresMigration'
 import type { UserRole } from '../db/types'
 
 export function toIpcError(error: unknown): Error {
@@ -183,6 +187,16 @@ export function toIpcError(error: unknown): Error {
   }
   if (error instanceof InvalidPgBackupFileError) {
     return encodeIpcError({ code: 'INVALID_BACKUP_FILE', message: error.message })
+  }
+  if (error instanceof DestinationNotEmptyError) {
+    return encodeIpcError({
+      code: 'MIGRATION_DESTINATION_NOT_EMPTY',
+      message: error.message,
+      details: { tableCounts: error.tableCounts }
+    })
+  }
+  if (error instanceof MigrationRequiresNetworkedModeError) {
+    return encodeIpcError({ code: 'MIGRATION_REQUIRES_NETWORKED_MODE', message: error.message })
   }
   if (error instanceof Error) return error
   return new Error(String(error))

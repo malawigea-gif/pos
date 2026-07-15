@@ -35,7 +35,8 @@
     "sections": {
       "language": "Language",
       "profile": "Profile Data",
-      "serverConnection": "Server Connection"
+      "serverConnection": "Server Connection",
+      "dataMigration": "Import Existing Data"
     },
     "language": {
       "label": "Application language",
@@ -69,6 +70,20 @@
       "save": "Save",
       "restartPrompt": "Saved. LankaPOS must restart to connect using these settings.",
       "restartNow": "Restart Now"
+    },
+    "dataMigration": {
+      "description": "One-time import for a shop moving from a single-PC (Standalone) install to a shared server: reads an existing SQLite database and copies every row into this server, keeping the original IDs and dates. Only works once, against an otherwise-empty server — run it right after switching this till to Networked mode, before using it for real.",
+      "needsNetworkedMode": "Switch this till to Networked mode first (see Server Connection above) and restart, then come back here to import your existing data into the new server.",
+      "chooseFile": "Choose SQLite File...",
+      "run": "Import Data",
+      "table": "Table",
+      "existingRows": "Existing rows",
+      "importedRows": "Rows imported",
+      "success": "Import complete. Check the row counts below against your old install.",
+      "confirmTitle": "Import Existing Data?",
+      "confirmWarning": "This copies every row from the selected file into the currently connected server. It only works once, against a server with no real data yet — do this before any till starts using Networked mode for real sales.",
+      "confirm": "Import Now",
+      "running": "Importing..."
     }
   },
   "errors": {
@@ -99,6 +114,8 @@
     "INVALID_BACKUP_FILE": "That file doesn't look like a valid LankaPOS backup",
     "PG_TOOL_NOT_FOUND": "PostgreSQL client tools (pg_dump/pg_restore) were not found on this PC. Install PostgreSQL and make sure its bin folder is on this PC's PATH, then try again.",
     "PG_BACKUP_FAILED": "The backup/restore command failed. Check that pg_dump/pg_restore are correctly installed and that the server connection details in Settings are correct.",
+    "MIGRATION_DESTINATION_NOT_EMPTY": "This server already has real data — refusing to import to avoid duplicating rows. See the table below for what's blocking it.",
+    "MIGRATION_REQUIRES_NETWORKED_MODE": "Switch this till to Networked mode and restart before importing existing data.",
     "UNKNOWN": "Something went wrong. Please try again."
   },
   "inventory": {
