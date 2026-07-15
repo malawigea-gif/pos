@@ -402,15 +402,16 @@ law, but that's a policy fact, not something to hard-code).
 
 Everything below is built, tested, and manually verified working end-to-end
 (including through a packaged Windows installer) unless a column says
-otherwise — **except the Networked-mode row below**, whose code is
-complete and unit-tested against SQLite, but has not yet been run against a
-real Postgres server (no working local Postgres was available in the
-environment this was built in). See §6 for exactly what that means and
-what to verify before relying on it.
+otherwise. The Networked-mode row's migration/concurrency/data-import
+logic has since been run against a real local PostgreSQL 15 install
+(`tests/integration/*.test.ts` with `TEST_POSTGRES_URL` set — see §7) and
+passed in full; see §6 for exactly what that run did and did not cover
+(a real shop's actual multi-till LAN hardware/network still hasn't been
+exercised).
 
 | Module | Status | Notes |
 |---|---|---|
-| Database schema/migrations | Done | 14 migrations, see §4; dialect-compatible with Postgres (not yet verified live — see above) |
+| Database schema/migrations | Done | 14 migrations, see §4; dialect-compatible with Postgres, confirmed by running the full chain against a real server |
 | Inventory | Done | Items (`books` table internally), categories, stock adjustments, stock take sessions. UI labels read "Item(s)" rather than "Book(s)" (values only — internal `books` table/repository/IPC names are unchanged); items have an optional `brand` text field, form-only (not shown in the items table). Duplicate barcode/ISBN on create or update is caught before the write (`assertNoDuplicateCodes()` in `booksRepository.ts`) and surfaced as `DUPLICATE_BARCODE`/`DUPLICATE_ISBN` in the form's error banner, instead of a raw SQLite UNIQUE-constraint error falling through to the generic "Something went wrong" message |
 | Sales/Billing | Done | Cart, hold/resume, split payments (cash/card/mobile wallet/credit/other), receipts (screen, PDF export, thermal print). Scanning/searching a barcode opens a Qty modal (auto-focused, pre-selected, defaults to 1) instead of adding directly; confirming adds the entered quantity to the cart, incrementing an existing line for that item rather than creating a duplicate — this applies to both barcode-scan/Enter and manually clicking a search result. The barcode-scan → qty-modal cart UI is shared with Quotations via `src/renderer/src/components/ItemSearchCart/ItemSearchCart.tsx` (and customer lookup via `components/CustomerSelect/`), not duplicated per page. Receipts print the shop's business-profile header (name/address/phone/email, from Settings — see below) and can be exported as A4, A5, or the original 80mm-thermal-shaped PDF, chosen per export in `ReceiptModal.tsx` (`buildReceiptHtml`/`renderReceiptPdf` both take a `paperSize` — no persisted default setting exists for this yet, it's a per-print choice defaulting to 80mm) |
 | Quotations | Done | A separate top-level module for issuing price estimates (`quote_no` format `QUO-YYYY-NNNNNN`) that take no payment and never touch stock at creation — `createQuotation()` stores a plain-sum estimate (no discounts/tax computed), matching how `holdSale()` already behaves. Converting a quotation to a real sale (`convertQuotationToSale()`) is the only place stock moves: it composes with `checkoutSaleWithTrx()` (the transaction-accepting core of `salesRepository.ts`'s checkout, split out from the public `checkoutSale()` specifically to support this) inside one transaction, so the quotation's status flip to `'converted'` and the resulting sale/stock-deduction commit or roll back together — real pricing (discounts/combos/tax) is computed fresh at conversion, not trusted from the quotation's estimate. A voided or already-converted quotation can't be converted or voided again. Printing reuses the same receipt pipeline as Sales (`documentType: 'invoice' \| 'quotation'` on `ReceiptData`), labeled "Quotation" with a "not a tax invoice" disclaimer and the valid-until date instead of an invoice heading. `quotations:convertToSale`/`quotations:void` are intentionally unguarded (no `withRole`), matching `sales:checkout`'s own precedent as a core cashier action |
@@ -422,7 +423,7 @@ what to verify before relying on it.
 | Backup & Recovery | Done | Manual + scheduled backups (retention-pruned), restore-from-file with validation, relaunches the app after restore. Standalone: SQLite file copy, unchanged. Networked: `pg_dump`/`pg_restore` child processes against the configured server instead (`postgresBackupService.ts`) — same buttons/UX, sharing the same folder/list/retention code, but requires the PostgreSQL client tools installed on whichever PC clicks Backup/Restore (a new dependency the file-copy path never had — see §6) |
 | Audit Log | Done | Filterable/paginated viewer over `audit_log`, joined with the acting user |
 | Settings | Done | Per-user language switcher (`src/renderer/src/pages/Settings/SettingsPage.tsx`; the persisted-language feature itself is covered under User Management above); a Profile Data section (business name/phone/email/address) viewable by every role but editable only by admin/manager (`withRole(['admin','manager'])` on `settings:profile:set`), stored via the same generic `settings` key-value table as backup/idle-timeout config (`profile.*` keys, `getBusinessProfile()`/`setBusinessProfile()` in `settingsRepository.ts`) and threaded into every printed receipt/quotation header; a static copyright-notice panel (visible to every role, not just admin/manager) sits to the left of these sections in a `.layout`/`.main`/side-panel split matching Sales' `SaleTab.module.css` convention — see the i18n note below for why its text is hard-coded rather than translated. Admin-only Server Connection section (standalone/networked mode + connection details, test-connection, restart prompt) and Import Existing Data section (one-time SQLite → Postgres migration) — see the Networked / Multi-till row below |
-| Networked / Multi-till | Done (code complete; not yet verified against a real Postgres server — see §6) | Single-shop, LAN-only multi-till support — see §2's "Database mode"/"Startup failure"/"Live connection loss"/"Multi-till concurrency" for the architecture. Covers: Standalone/Networked mode switch with connection test (`ServerConnectionForm.tsx`); a translated startup-failure recovery screen with Retry and in-place connection-fix, reachable with no login (`ServerUnreachableScreen.tsx`); a live "connection lost" banner during normal use that clears itself once the connection recovers (`ConnectionBanner.tsx`); the 14 migrations made Postgres-compatible (`dialectHelpers.ts`); every stock/credit/loyalty/supplier-balance update made race-safe under concurrent tills; `pg_dump`/`pg_restore` backup/restore; and a one-time admin tool to import an existing Standalone shop's SQLite data into a fresh Postgres server, refusing if the destination already has real data (`sqliteToPostgresMigration.ts`) |
+| Networked / Multi-till | Done | Single-shop, LAN-only multi-till support — see §2's "Database mode"/"Startup failure"/"Live connection loss"/"Multi-till concurrency" for the architecture. Covers: Standalone/Networked mode switch with connection test (`ServerConnectionForm.tsx`); a translated startup-failure recovery screen with Retry and in-place connection-fix, reachable with no login (`ServerUnreachableScreen.tsx`); a live "connection lost" banner during normal use that clears itself once the connection recovers (`ConnectionBanner.tsx`); the 14 migrations made Postgres-compatible (`dialectHelpers.ts`); every stock/credit/loyalty/supplier-balance update made race-safe under concurrent tills; `pg_dump`/`pg_restore` backup/restore; and a one-time admin tool to import an existing Standalone shop's SQLite data into a fresh Postgres server, refusing if the destination already has real data (`sqliteToPostgresMigration.ts`). The migration chain, the concurrency guarantee, and the data-import tool have all been run and passed against a real Postgres server (see §6/§7); the admin UI (Server Connection, startup-failure screen, connection-loss banner, Backup & Recovery's pg_dump path) has not been clicked through by a human yet |
 
 **Deferred / not implemented** (no code exists for these — not partially
 built, just not started):
@@ -449,11 +450,14 @@ built, just not started):
   unit-tested since no physical printer exists in the dev environment).
 - A full backup → restore cycle against a real installed copy, not just the
   dev database.
-- **Everything Networked-mode, against a real Postgres server** (see §6):
-  the full migration chain, live multi-till concurrency (the
-  `TEST_POSTGRES_URL`-gated tests in `tests/integration/` cover this but
-  have not actually been run), a real `pg_dump`/`pg_restore` round-trip,
-  and the one-time SQLite → Postgres data import.
+- **Networked-mode's admin UI and hardware-facing pieces**, against a real
+  multi-till setup (see §6): the migration chain, live concurrency, and
+  the data-import tool are covered by `tests/integration/` and have been
+  run and passed against a real Postgres server — what's left is clicking
+  through Server Connection/the startup-failure screen/the connection-loss
+  banner as a human, a real `pg_dump`/`pg_restore` round-trip, and trying
+  all of the above across actual separate till and server machines on a
+  LAN rather than one till talking to a local server.
 
 ## 6. Known issues & constraints
 
@@ -518,19 +522,23 @@ built, just not started):
   this writing — anything deferred is listed explicitly above instead of
   left as an inline marker. If you add a `TODO`, please also add a line
   here (or resolve it before it lands).
-- **None of the Networked-mode (Postgres) code has been run against a real
-  Postgres server yet.** It was written and reviewed carefully (including
-  reading Kysely's own compiler source for the dialect-compatibility fixes
-  in §4), and every SQLite-path test still passes unchanged, but neither
-  Docker Desktop nor a native Windows PostgreSQL install could be gotten to
-  a reachable, working state in the environment this was built in — see
-  the git history around each Networked-mode commit for the specifics.
-  Concretely, before relying on this in a real shop: run
-  `TEST_POSTGRES_URL=postgres://user:pass@host:5432/db npm test` (this
-  activates `tests/integration/*.test.ts`, which self-skip otherwise) and
-  manually walk through Settings → Server Connection, the startup-failure
-  screen (point a till at a wrong IP), a `pg_dump`/`pg_restore` backup and
-  restore, and the data-migration tool, on an actual multi-till LAN setup.
+- **The migration/concurrency/data-import logic has been run against a
+  real Postgres server** (a local PostgreSQL 15 install, after Docker
+  Desktop's engine could not be gotten into a reachable state — see git
+  history around the Networked-mode commits): `TEST_POSTGRES_URL=... npm
+  test` activates `tests/integration/*.test.ts` (self-skipped otherwise),
+  and all three suites pass — the full 14-migration chain producing a
+  correct schema, 10 concurrent stock deductions against 5 units of stock
+  leaving exactly 5 winners/5 `InsufficientStockError` losers/final stock
+  at 0 (not negative), and a SQLite → Postgres import preserving ids and
+  correctly advancing sequences. **What this has *not* verified**: the
+  admin UI itself (Server Connection, the startup-failure screen, the
+  live connection-loss banner, a real `pg_dump`/`pg_restore` backup and
+  restore click-through, the Import Existing Data screen) has never been
+  clicked through by a human, and none of this has run on an actual
+  multi-till LAN with a dedicated server machine — only against a single
+  local server from one till's perspective. Both are worth doing before
+  trusting this in a real shop.
 - **`app-config.json` stores the Postgres password in plain text** (in the
   userData folder, alongside — not inside — the database). This matches
   what was asked for ("a small local config file... written via plain fs,
@@ -579,17 +587,19 @@ Electron-built native module the real app uses.
 **Testing against real Postgres**: `tests/integration/*.test.ts` (migration
 compatibility, multi-till concurrency, and the SQLite → Postgres data
 import) are opt-in — they self-skip with a console warning unless
-`TEST_POSTGRES_URL` is set to a connection string for a database that's
-safe to wipe (each one drops and recreates the `public` schema before
-running):
+`TEST_POSTGRES_URL` is set to a connection string with permission to create
+databases (each of the three files creates and drops its own dedicated
+database — see `tests/integration/pgTestDatabase.ts` — rather than sharing
+one, so they can safely run in parallel against the same server):
 
 ```
 TEST_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/lankapos_test npm test
 ```
 
-`npm test` on its own (no env var) only ever exercises the SQLite path, on
-purpose — see §6 for why none of the Postgres path has been verified live
-yet.
+`npm test` on its own (no env var) only exercises the SQLite path; all
+three integration suites have been run this way against a real local
+PostgreSQL 15 install and pass — see §6 for exactly what that did and
+didn't cover.
 
 ## 8. How to extend safely
 
