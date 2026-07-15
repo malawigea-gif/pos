@@ -4,7 +4,7 @@ import SqliteDatabase from 'better-sqlite3'
 import type { Kysely } from 'kysely'
 import type { Database } from '../db/types'
 import { getSetting, setSetting } from '../db/repositories/settingsRepository'
-import { getDb } from '../db'
+import { getStandaloneSqlite } from '../db'
 import type { BackupFileInfo, BackupSettings, UpdateBackupSettingsRequest } from '../../shared/backup'
 
 // Matches both the current "lankapos-backup-*" filenames and the older
@@ -152,8 +152,7 @@ export async function runBackupNow(
   userId: number | null
 ): Promise<BackupFileInfo> {
   const settings = await getBackupSettings(db, defaultFolder)
-  const { sqlite } = getDb()
-  const info = await createBackupFile(sqlite, settings.folder)
+  const info = await createBackupFile(getStandaloneSqlite(), settings.folder)
   await pruneBackups(settings.folder, settings.retentionCount)
   await setSetting(db, SETTING_KEYS.lastBackupAt, info.createdAt, userId)
   return info

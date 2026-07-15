@@ -3,7 +3,7 @@ import { mkdir } from 'fs/promises'
 import { join } from 'path'
 import type { Kysely } from 'kysely'
 import type { Database } from '../db/types'
-import { getDb, getDbPath } from '../db'
+import { getDbPath, getStandaloneSqlite } from '../db'
 import { getSession } from '../auth/session'
 import {
   getBackupSettings,
@@ -96,8 +96,7 @@ export function registerBackupIpc(db: Kysely<Database>): void {
     'backup:restore',
     ipcHandler(
       withRole([...ADMIN_ONLY], async (filePath: string): Promise<void> => {
-        const { sqlite } = getDb()
-        await restoreDatabaseFile(sqlite, getDbPath(), filePath)
+        await restoreDatabaseFile(getStandaloneSqlite(), getDbPath(), filePath)
         // Give the resolved response a moment to reach the renderer before
         // the process exits — the app must restart to safely reopen a
         // freshly-swapped database file with a clean connection/IPC state.
