@@ -93,6 +93,12 @@ were added for this, it was manual/exploratory):
   a dropped connection without crashing the main process, IPC calls get classified as
   `CONNECTION_LOST`, and **both** the global fixed banner ("Connection to server lost —
   reconnecting...") and the per-screen inline error render correctly, simultaneously.
+- A real `pg_dump`/`pg_restore` backup-and-restore round-trip through the actual Backup & Recovery
+  UI (not just the CLI): clicked "Backup Now", which produced a genuine `.dump` file and showed the
+  correct green "Backup created" state; then clicked a Backup History row's "Restore" button,
+  confirmed "Restore and Restart", and verified via `psql` afterward that all 28 app tables plus
+  seed data (`users`, `tax_rates`) were correctly restored. PostgreSQL client tools
+  (`pg_dump`/`pg_restore`/`psql`) are now genuinely usable on this dev machine — see §4.
 
 **Explicitly NOT yet verified:**
 - **Real two-PC LAN testing.** Everything above was one till (or one Electron instance) talking to
@@ -100,9 +106,6 @@ were added for this, it was manual/exploratory):
   used an actual separate server PC and a separate till PC talking over a real network — firewall
   rules, real network latency, and genuinely concurrent *processes on different machines* are all
   still unverified in practice, even though the code path is identical to the same-machine case.
-- A real `pg_dump`/`pg_restore` backup-and-restore round-trip (the tool-not-found error path was
-  tested for real; a successful dump/restore was not, since this dev machine's Postgres client
-  tools aren't on this shell's PATH — see §4).
 - Sinhala translations reviewed by a native speaker (see §5).
 
 ## 4. Known environment gotchas
@@ -133,9 +136,12 @@ Specific to the Windows dev machine this session used — save yourself the redi
   ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   ```
   should print `True`.
-- **This shell's PATH doesn't include PostgreSQL's bin folder by default** —
-  `C:\Program Files\PostgreSQL\15\bin` needs to be prepended per-session to use `psql`/`pg_dump`/
-  `pg_restore` directly.
+- **`C:\Program Files\PostgreSQL\15\bin` has been added to this machine's persistent User-level
+  PATH** (`psql`/`pg_dump`/`pg_restore` are genuinely installed and usable now — a real dump/restore
+  round-trip was run through the app's own Backup & Recovery UI, see §3). This registry change does
+  **not** propagate to already-running shells/processes — a fresh app launch (Start Menu, or a new
+  terminal) picks it up automatically, but any tool session that was already open before the PATH
+  was set still needs the bin folder prepended per-command for the rest of its life.
 - **When debugging by relaying terminal output through chat, ask for the literal pasted output once
   and verify independently wherever possible** (e.g. `netstat`, a direct `psql` connection attempt)
   rather than trusting a relayed "done"/"it worked" — several rounds this session were spent
@@ -177,8 +183,6 @@ Specific to the Windows dev machine this session used — save yourself the redi
 - **No `till_id` (or equivalent) column anywhere** records which physical till a sale/action came
   from. Not something anyone asked for, but it means per-till reporting isn't possible today if
   that's ever wanted. (Also from the Task 5 audit.)
-- **A real `pg_dump`/`pg_restore` round-trip hasn't been run** (§3) — only the tool-not-found error
-  path was exercised for real.
 - **No forced password change on first login** — `admin`/`admin123` is seeded on every fresh
   install (Standalone or the first Networked connection); changing it is a manual step, documented
   but not enforced. Pre-existing, not introduced this session, but worth keeping on a go-live
