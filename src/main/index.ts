@@ -24,6 +24,7 @@ import { registerSettingsIpc } from './ipc/settings'
 import { registerQuotationsIpc } from './ipc/quotations'
 import { registerSystemIpc } from './ipc/system'
 import { registerMigrationIpc } from './ipc/migration'
+import { warmUpReceiptCaptureWindow } from './receipts/printReceipt'
 
 const BACKUP_CHECK_INTERVAL_MS = 15 * 60 * 1000
 
@@ -94,6 +95,11 @@ app.whenReady().then(async () => {
     registerQuotationsIpc(db)
     registerSystemIpc(db)
     registerMigrationIpc(db)
+
+    // Pre-create the hidden receipt-rasterizing window now, in the
+    // background, instead of paying its ~1.7-2s creation cost on the
+    // cashier's first Sinhala-receipt print of the day.
+    warmUpReceiptCaptureWindow()
 
     const networkedConfig = config.mode === 'networked' ? config.networked : null
     const defaultBackupFolder = join(app.getPath('userData'), 'backups')

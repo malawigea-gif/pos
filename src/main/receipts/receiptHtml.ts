@@ -53,7 +53,7 @@ function receiptStyle(paperSize: ReceiptPaperSize): string {
 /** Builds a self-contained receipt HTML document (no external requests —
  *  the Sinhala font is embedded as base64 — so it renders identically
  *  offline in a hidden window regardless of dev vs. packaged build). */
-export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize): string {
+export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize, rasterZoom?: number): string {
   const t = RECEIPT_LABELS[data.language]
   const money = (n: number): string => formatMoney(n, data.language)
   const docLabel = data.documentType === 'quotation' ? t.quotationNo : t.invoiceNo
@@ -87,6 +87,7 @@ export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize)
   }
   * { box-sizing: border-box; }
   ${receiptStyle(paperSize)}
+  ${rasterZoom ? `body { zoom: ${rasterZoom}; }` : ''}
   .center { text-align: center; }
   table { width: 100%; border-collapse: collapse; margin: 2mm 0; }
   td, th { padding: 1mm 0; vertical-align: top; }

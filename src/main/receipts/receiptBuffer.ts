@@ -19,10 +19,19 @@ export interface BuildThermalBufferOptions {
 export function buildReceiptTextBuffer(data: ReceiptData, options: BuildThermalBufferOptions): Buffer {
   const t = RECEIPT_LABELS[data.language]
   const docLabel = data.documentType === 'quotation' ? t.quotationNo : t.invoiceNo
+  // 42, not the commonly-cited 48 — see printReceiptThermal for how this
+  // was confirmed against real 80mm hardware.
+  const paperWidthChars = options.paperWidthChars ?? 42
   const printer = new ThermalPrinter({
     type: PrinterTypes.EPSON,
-    interface: options.interfaceName,
-    width: options.paperWidthChars ?? 48,
+    // Pure buffer-building — getBuffer() is called below, never execute(),
+    // so no real interface is needed. An object short-circuits
+    // node-thermal-printer's interface-string parsing (which would
+    // otherwise try to load a printer driver for e.g. `printer:AUTO`).
+    // The library's own JS accepts an object here; only its .d.ts narrows
+    // this to `string` (see printReceipt.ts for the same cast).
+    interface: {} as unknown as string,
+    width: paperWidthChars,
     removeSpecialCharacters: false
   })
 
@@ -49,12 +58,25 @@ export function buildReceiptTextBuffer(data: ReceiptData, options: BuildThermalB
   printer.println(`${t.cashier}: ${data.cashierName}`)
   printer.drawLine()
 
+  // tableCustom's `width` option is a fraction of the printer's configured
+  // width, and it ceils each fractional cell independently rather than
+  // rounding the row as a whole — e.g. at width 42 with 0.55/0.15/0.3,
+  // cells come out to ceil(23.1)+ceil(6.3)+ceil(12.6) = 24+7+13 = 44
+  // characters, two over budget, on *every* row regardless of content.
+  // The printer's own hardware then wraps that overshoot mid-row (seen on
+  // real hardware as the total splitting mid-number, e.g. "80." / "00").
+  // Passing exact integer `cols` that are pre-computed to sum to the real
+  // width sidesteps the ceiling entirely.
+  const qtyCols = Math.round(paperWidthChars * 0.15)
+  const totalCols = Math.round(paperWidthChars * 0.3)
+  const titleCols = paperWidthChars - qtyCols - totalCols
+
   printer.alignLeft()
   for (const item of data.items) {
     printer.tableCustom([
-      { text: item.title, align: 'LEFT', width: 0.55 },
-      { text: String(item.quantity), align: 'RIGHT', width: 0.15 },
-      { text: item.lineTotal.toFixed(2), align: 'RIGHT', width: 0.3 }
+      { text: item.title, align: 'LEFT', cols: titleCols },
+      { text: String(item.quantity), align: 'RIGHT', cols: qtyCols },
+      { text: item.lineTotal.toFixed(2), align: 'RIGHT', cols: totalCols }
     ])
   }
   printer.drawLine()
