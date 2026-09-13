@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ReceiptData, ReceiptPaperSize } from '@shared/sales'
 import { RECEIPT_LABELS } from '@shared/receiptLabels'
+import { computeReceiptLinePricing } from '@shared/receiptPricing'
 import { Modal } from '../../components/Modal/Modal'
 import { useDescribeError } from '../../lib/ipcError'
 import formStyles from '../../components/Form/formStyles.module.css'
@@ -25,6 +26,15 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps): JSX.Element 
   const labels = RECEIPT_LABELS[data.language]
   const isQuotation = data.documentType === 'quotation'
   const docLabel = isQuotation ? labels.quotationNo : labels.invoiceNo
+  const linePricings = data.items.map((item) =>
+    computeReceiptLinePricing(item.defaultUnitPrice, item.unitPrice, item.quantity)
+  )
+  // data.discountTotal already covers both a manual per-line override (see
+  // computeSalePricing.ts) and whatever the automatic discount/combo engine
+  // applied — it's the true total reduction on its own. linePricings above
+  // is only for the per-line Price column; summing its .discount here too
+  // would double-count every manually-discounted line.
+  const totalDiscount = data.discountTotal
 
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,8 +62,8 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps): JSX.Element 
     try {
       await window.api.sales.printReceiptThermal(data)
       setStatus(t('sales.receiptModal.printSuccess'))
-    } catch {
-      setError(t('sales.receiptModal.printerUnavailable'))
+    } catch (err) {
+      setError(describeError(err))
     } finally {
       setBusy(false)
     }
@@ -135,17 +145,20 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps): JSX.Element 
             <tr>
               <th>{labels.item}</th>
               <th className={styles.num}>{labels.qty}</th>
-              <th className={styles.num}>{labels.lineTotal}</th>
+              <th className={styles.num}>{labels.price}</th>
             </tr>
           </thead>
           <tbody>
-            {data.items.map((item, index) => (
-              <tr key={index}>
-                <td>{item.title}</td>
-                <td className={styles.num}>{item.quantity}</td>
-                <td className={styles.num}>{item.lineTotal.toFixed(2)}</td>
-              </tr>
-            ))}
+            {data.items.map((item, index) => {
+              const pricing = linePricings[index]
+              return (
+                <tr key={index}>
+                  <td>{item.title}</td>
+                  <td className={styles.num}>{item.quantity}</td>
+                  <td className={styles.num}>{pricing.price.toFixed(2)}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
         <hr />
@@ -153,10 +166,10 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps): JSX.Element 
           <span>{labels.subtotal}</span>
           <span>{data.subtotal.toFixed(2)}</span>
         </div>
-        {data.discountTotal > 0 && (
+        {totalDiscount > 0 && (
           <div className={styles.totalsRow}>
             <span>{labels.discount}</span>
-            <span>-{data.discountTotal.toFixed(2)}</span>
+            <span>-{totalDiscount.toFixed(2)}</span>
           </div>
         )}
         {data.taxTotal > 0 && (
@@ -186,6 +199,12 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps): JSX.Element 
               <div className={styles.totalsRow}>
                 <span>{labels.change}</span>
                 <span>{data.change.toFixed(2)}</span>
+              </div>
+            )}
+            {data.profit !== null && (
+              <div className={styles.totalsRow}>
+                <span>{labels.profit}</span>
+                <span>{data.profit.toFixed(2)}</span>
               </div>
             )}
           </>

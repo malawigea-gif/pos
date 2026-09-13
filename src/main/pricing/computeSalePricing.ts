@@ -1,6 +1,7 @@
 import type { Kysely, Selectable } from 'kysely'
 import type { ComboOffersTable, Database, DiscountsTable } from '../db/types'
 import type { CartItemInput } from '../../shared/sales'
+import { resolveUnitDefaultPriceByLabel } from '../../shared/receiptPricing'
 
 type Discount = Selectable<DiscountsTable>
 type ComboOffer = Selectable<ComboOffersTable>
@@ -12,6 +13,9 @@ export interface PricedLineItem {
   discountAmount: number
   taxAmount: number
   lineTotal: number
+  unitLabel: string | null
+  stockQuantity: number
+  priceOverridden: boolean
 }
 
 export interface SalePricing {
@@ -40,6 +44,16 @@ function findBestMatch<T extends { scope: string; book_id: number | null; catego
   return candidates.find((c) => c.scope === 'all')
 }
 
+/** A discount's wholesale (min_quantity) and loyalty-customer conditions are
+ *  filters layered on top of scope, not a scope of their own — so they're
+ *  applied before findBestMatch ever runs, against the specific cart line
+ *  (its quantity) and sale (whether a customer is attached). */
+function matchesConditions(discount: Discount, lineQuantity: number, hasCustomer: boolean): boolean {
+  if (discount.min_quantity != null && lineQuantity < discount.min_quantity) return false
+  if (discount.requires_loyalty_customer && !hasCustomer) return false
+  return true
+}
+
 /** Computes discount/tax/line totals for a cart, in one pass, reading the
  *  currently-active discounts/combo offers and each book's tax rate. Meant
  *  to be called from inside checkoutSale's transaction so pricing reflects
@@ -47,16 +61,25 @@ function findBestMatch<T extends { scope: string; book_id: number | null; catego
 export async function computeSalePricing(
   trx: Kysely<Database>,
   cartItems: CartItemInput[],
-  at: Date = new Date()
+  at: Date = new Date(),
+  customerId?: number
 ): Promise<SalePricing> {
   if (cartItems.length === 0) {
     return { items: [], subtotal: 0, discountTotal: 0, taxTotal: 0, total: 0 }
   }
+  const hasCustomer = customerId !== undefined
 
   const bookIds = cartItems.map((item) => item.bookId)
   const books = await trx
     .selectFrom('books')
-    .select(['id', 'category_id', 'tax_rate_id'])
+    .select([
+      'id',
+      'category_id',
+      'tax_rate_id',
+      'unit_type',
+      'selling_price',
+      'secondary_unit_selling_price'
+    ])
     .where('id', 'in', bookIds)
     .execute()
   const bookById = new Map(books.map((b) => [b.id, b]))
@@ -90,9 +113,35 @@ export async function computeSalePricing(
     const categoryId = book?.category_id ?? null
     const taxRate = book?.tax_rate_id != null ? taxRateById.get(book.tax_rate_id) : undefined
 
-    const gross = cartItem.unitPrice * cartItem.quantity
+    // A manually-priced line (Discount Price in QtyModal) is the cashier's
+    // deliberate final say on that line — automatic discount/combo rules
+    // are skipped for it entirely rather than stacking on top, so the
+    // receipt's manual Discount figure (price - unitPrice) * quantity stays
+    // the whole story for that line, not a partial one. Tax still applies
+    // normally either way.
+    const skipAutomaticDiscounts = cartItem.priceOverridden === true
 
-    const combo = findBestMatch<ComboOffer>(comboOffers, cartItem.bookId, categoryId)
+    // For an overridden line, cartItem.unitPrice is the cashier's *charged*
+    // (already-discounted) price, not the book's list price — so gross
+    // (which feeds the bill-level Subtotal, meant to be the pre-discount
+    // sum) has to come from the book's own current default price instead,
+    // same as the receipt's "Price" column resolves it (see
+    // resolveUnitDefaultPriceByLabel's other caller in buildReceiptData).
+    // A non-overridden line's unitPrice already *is* that default price, so
+    // this is a no-op there.
+    const listUnitPrice = skipAutomaticDiscounts
+      ? resolveUnitDefaultPriceByLabel(
+          {
+            unit_type: book?.unit_type ?? 'qty',
+            selling_price: book?.selling_price ?? cartItem.unitPrice,
+            secondary_unit_selling_price: book?.secondary_unit_selling_price ?? null
+          },
+          cartItem.unitLabel ?? null
+        )
+      : cartItem.unitPrice
+    const gross = listUnitPrice * cartItem.quantity
+
+    const combo = skipAutomaticDiscounts ? undefined : findBestMatch<ComboOffer>(comboOffers, cartItem.bookId, categoryId)
     let comboFreeQty = 0
     if (combo) {
       const groupSize = combo.buy_quantity + combo.free_quantity
@@ -103,7 +152,10 @@ export async function computeSalePricing(
     const comboDiscount = comboFreeQty * cartItem.unitPrice
 
     const discountableAmount = gross - comboDiscount
-    const discount = findBestMatch<Discount>(discounts, cartItem.bookId, categoryId)
+    const eligibleDiscounts = skipAutomaticDiscounts
+      ? []
+      : discounts.filter((d) => matchesConditions(d, cartItem.quantity, hasCustomer))
+    const discount = findBestMatch<Discount>(eligibleDiscounts, cartItem.bookId, categoryId)
     let promoDiscount = 0
     if (discount) {
       promoDiscount =
@@ -112,7 +164,14 @@ export async function computeSalePricing(
           : Math.min(discount.value * cartItem.quantity, discountableAmount)
     }
 
-    const discountAmount = comboDiscount + promoDiscount
+    // The manual override's own discount: gross (list price) minus what was
+    // actually charged. comboDiscount/promoDiscount are always 0 here (both
+    // are gated on skipAutomaticDiscounts above), so this never stacks with
+    // them — it's the whole discountAmount for an overridden line, the same
+    // way comboDiscount/promoDiscount are the whole story for a normal one.
+    const manualDiscount = skipAutomaticDiscounts ? gross - cartItem.unitPrice * cartItem.quantity : 0
+
+    const discountAmount = comboDiscount + promoDiscount + manualDiscount
     const netAmount = gross - discountAmount
     const taxAmount = taxRate && !taxRate.is_exempt ? netAmount * (taxRate.rate_percent / 100) : 0
     const lineTotal = netAmount + taxAmount
@@ -127,7 +186,10 @@ export async function computeSalePricing(
       unitPrice: cartItem.unitPrice,
       discountAmount,
       taxAmount,
-      lineTotal
+      lineTotal,
+      unitLabel: cartItem.unitLabel ?? null,
+      stockQuantity: cartItem.stockQuantity ?? cartItem.quantity,
+      priceOverridden: cartItem.priceOverridden === true
     })
   }
 

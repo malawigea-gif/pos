@@ -1,4 +1,5 @@
 import { RECEIPT_LABELS } from '../../shared/receiptLabels'
+import { computeReceiptLinePricing } from '../../shared/receiptPricing'
 import type { ReceiptData, ReceiptPaperSize } from '../../shared/sales'
 import { SINHALA_FONT_BASE64 } from './sinhalaFontBase64'
 
@@ -58,16 +59,30 @@ export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize,
   const money = (n: number): string => formatMoney(n, data.language)
   const docLabel = data.documentType === 'quotation' ? t.quotationNo : t.invoiceNo
 
+  // Per-line pricing (Price/Subtotal/Discount, see computeReceiptLinePricing)
+  // is still computed here even though Section A (the item table) now only
+  // shows Price — the per-line discount is summed below into the totals
+  // block's single bill-level Discount figure instead of a per-line column.
+  const linePricings = data.items.map((item) =>
+    computeReceiptLinePricing(item.defaultUnitPrice, item.unitPrice, item.quantity)
+  )
+  // data.discountTotal already covers both a manual per-line override (see
+  // computeSalePricing.ts) and whatever the automatic discount/combo engine
+  // applied — it's the true total reduction on its own. linePricings above
+  // is only for the per-line Price column; summing its .discount here too
+  // would double-count every manually-discounted line.
+  const totalDiscount = data.discountTotal
+
   const itemRows = data.items
-    .map(
-      (item) => `
+    .map((item, i) => {
+      const pricing = linePricings[i]
+      return `
         <tr>
           <td class="item-title">${escapeHtml(item.title)}${item.isbn ? `<br/><span class="muted">${escapeHtml(item.isbn)}</span>` : ''}</td>
-          <td class="num">${item.quantity}</td>
-          <td class="num">${money(item.unitPrice)}</td>
-          <td class="num">${money(item.lineTotal)}</td>
+          <td class="num">${item.quantity}${item.unitLabel ? ` ${escapeHtml(item.unitLabel)}` : ''}</td>
+          <td class="num">${money(pricing.price)}</td>
         </tr>`
-    )
+    })
     .join('')
 
   const paymentRows = data.payments
@@ -117,7 +132,6 @@ export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize,
         <th style="text-align:left">${escapeHtml(t.item)}</th>
         <th class="num">${escapeHtml(t.qty)}</th>
         <th class="num">${escapeHtml(t.price)}</th>
-        <th class="num">${escapeHtml(t.lineTotal)}</th>
       </tr>
     </thead>
     <tbody>${itemRows}</tbody>
@@ -127,7 +141,7 @@ export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize,
 
   <table class="totals">
     <tr><td>${escapeHtml(t.subtotal)}</td><td class="num">${money(data.subtotal)}</td></tr>
-    ${data.discountTotal > 0 ? `<tr><td>${escapeHtml(t.discount)}</td><td class="num">-${money(data.discountTotal)}</td></tr>` : ''}
+    ${totalDiscount > 0 ? `<tr><td>${escapeHtml(t.discount)}</td><td class="num">-${money(totalDiscount)}</td></tr>` : ''}
     ${data.taxTotal > 0 ? `<tr><td>${escapeHtml(t.tax)}</td><td class="num">${money(data.taxTotal)}</td></tr>` : ''}
     <tr class="grand-total"><td>${escapeHtml(t.grandTotal)}</td><td class="num">${money(data.total)}</td></tr>
   </table>
@@ -144,6 +158,7 @@ export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize,
   <table class="totals">
     <tr><td>${escapeHtml(t.paid)}</td><td class="num">${money(data.amountPaid)}</td></tr>
     ${data.change > 0 ? `<tr><td>${escapeHtml(t.change)}</td><td class="num">${money(data.change)}</td></tr>` : ''}
+    ${data.profit !== null ? `<tr><td>${escapeHtml(t.profit)}</td><td class="num">${money(data.profit)}</td></tr>` : ''}
   </table>`
   }
 

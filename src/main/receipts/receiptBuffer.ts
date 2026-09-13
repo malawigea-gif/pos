@@ -1,5 +1,6 @@
 import { ThermalPrinter, PrinterTypes } from 'node-thermal-printer'
 import { RECEIPT_LABELS } from '../../shared/receiptLabels'
+import { computeReceiptLinePricing } from '../../shared/receiptPricing'
 import type { ReceiptData } from '../../shared/sales'
 
 export interface BuildThermalBufferOptions {
@@ -71,18 +72,33 @@ export function buildReceiptTextBuffer(data: ReceiptData, options: BuildThermalB
   const totalCols = Math.round(paperWidthChars * 0.3)
   const titleCols = paperWidthChars - qtyCols - totalCols
 
+  // Section A (the item table) only shows Item/Qty/Price — Subtotal and
+  // Discount stay per-line concepts computed here, but only their sum
+  // (across every line, plus whatever the automatic discount/combo engine
+  // separately applied) is shown, as a single bill-level Discount line in
+  // the totals section below, not per item.
+  const linePricings = data.items.map((item) =>
+    computeReceiptLinePricing(item.defaultUnitPrice, item.unitPrice, item.quantity)
+  )
   printer.alignLeft()
-  for (const item of data.items) {
+  data.items.forEach((item, i) => {
     printer.tableCustom([
       { text: item.title, align: 'LEFT', cols: titleCols },
       { text: String(item.quantity), align: 'RIGHT', cols: qtyCols },
-      { text: item.lineTotal.toFixed(2), align: 'RIGHT', cols: totalCols }
+      { text: linePricings[i].price.toFixed(2), align: 'RIGHT', cols: totalCols }
     ])
-  }
+  })
   printer.drawLine()
 
+  // data.discountTotal already covers both a manual per-line override (see
+  // computeSalePricing.ts) and whatever the automatic discount/combo engine
+  // applied — it's the true total reduction on its own. linePricings above
+  // is only for the per-line Price column; summing its .discount here too
+  // would double-count every manually-discounted line.
+  const totalDiscount = data.discountTotal
+
   printer.leftRight(t.subtotal, data.subtotal.toFixed(2))
-  if (data.discountTotal > 0) printer.leftRight(t.discount, `-${data.discountTotal.toFixed(2)}`)
+  if (totalDiscount > 0) printer.leftRight(t.discount, `-${totalDiscount.toFixed(2)}`)
   if (data.taxTotal > 0) printer.leftRight(t.tax, data.taxTotal.toFixed(2))
   printer.bold(true)
   printer.leftRight(t.grandTotal, data.total.toFixed(2))
@@ -95,6 +111,7 @@ export function buildReceiptTextBuffer(data: ReceiptData, options: BuildThermalB
     }
     printer.leftRight(t.paid, data.amountPaid.toFixed(2))
     if (data.change > 0) printer.leftRight(t.change, data.change.toFixed(2))
+    if (data.profit !== null) printer.leftRight(t.profit, data.profit.toFixed(2))
   }
 
   printer.newLine()

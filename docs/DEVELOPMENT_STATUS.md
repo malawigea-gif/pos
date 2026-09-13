@@ -66,6 +66,23 @@ elsewhere in this doc); everything from Task 1 onward has its own commit.
   only ever talks to the configured LAN Postgres server — no external/cloud dependency was
   introduced anywhere in this migration. Standalone mode remains fully offline as before.
 
+- **Fixed: bill-level Subtotal/Discount/Profit wrong when a per-unit manual Discount Price
+  override was used** (commit pending). `computeSalePricing.ts` was reckoning gross/Subtotal
+  against the cashier's *charged* price for an overridden line instead of the book's list price,
+  so Subtotal came out already net of the manual discount and the manual discount itself never
+  reached the persisted `discountTotal` — Total only looked right because Subtotal had silently
+  absorbed the discount already. Fixed by resolving the line's list price via
+  `resolveUnitDefaultPriceByLabel` (same helper the receipt's Price column already uses) for
+  gross, and folding the manual reduction into `discountAmount`; net/tax/line-total per line are
+  unchanged, so Profit, returns, and Profit & Loss reporting were unaffected (Profit was already
+  computed correctly from the charged price, independent of Subtotal/Total). Also removed a
+  now-redundant client-side re-sum of the manual discount in the three render paths
+  (`ReceiptModal.tsx`, `receiptHtml.ts`, `receiptBuffer.ts`) that would otherwise have
+  double-counted it once `discountTotal` became authoritative. See
+  `tests/unit/pricing/computeSalePricing.test.ts` and
+  `tests/unit/receipts/buildReceiptData.test.ts` for the worked repro (2 units, list 4500 →
+  discounted 4000, cash 10000).
+
 ## 3. What's verified vs. not yet verified
 
 **Verified against a real local PostgreSQL 15 instance** (`tests/integration/*.test.ts`, run with
