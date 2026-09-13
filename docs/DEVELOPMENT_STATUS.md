@@ -67,7 +67,7 @@ elsewhere in this doc); everything from Task 1 onward has its own commit.
   introduced anywhere in this migration. Standalone mode remains fully offline as before.
 
 - **Fixed: bill-level Subtotal/Discount/Profit wrong when a per-unit manual Discount Price
-  override was used** (commit pending). `computeSalePricing.ts` was reckoning gross/Subtotal
+  override was used** (`99ad7bd`). `computeSalePricing.ts` was reckoning gross/Subtotal
   against the cashier's *charged* price for an overridden line instead of the book's list price,
   so Subtotal came out already net of the manual discount and the manual discount itself never
   reached the persisted `discountTotal` — Total only looked right because Subtotal had silently
