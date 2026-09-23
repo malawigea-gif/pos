@@ -36,34 +36,40 @@ function formatDateOnly(iso: string, language: 'en' | 'si'): string {
  *  rather than just stretching the thermal layout across a full page.
  *
  *  Content width is deliberately narrower than the nominal 78mm usable
- *  width of an "80mm" roll. The thermal/ESC-POS TEXT path already had to
- *  do this same correction — see printReceipt.ts's paperWidthChars
- *  comment: this printer's real usable width measured 42 characters, not
- *  the commonly-cited 48, on a real BIXOLON SRP-350plusIII. The Sinhala
- *  RASTER (bitmap/image) path never got the equivalent correction: it
- *  renders at the full nominal 78mm and relies on the printer to accept a
- *  raster image exactly as wide as the theoretical paper width. On real
- *  hardware whose true printable area is narrower than nominal (same
- *  finding as the text path), the printer silently drops whatever falls
- *  outside its physical print head width instead of wrapping/rejecting —
- *  and because amount values are right-aligned (flush to the content
- *  box's right edge), it's exactly the digits that fall outside and get
- *  dropped, while the currency symbol/code just to their left survives
- *  (reported: "Subtotal"/"Discount"/"Total" rows print a truncated
- *  currency fragment with no digits, only on Sinhala/raster receipts —
- *  English/text-mode receipts, already using the calibrated 42-char
- *  width, are unaffected). 68mm applies the same ~87.5% (42/48) safety
- *  ratio the text path already established for this hardware, giving
- *  ~6mm of margin on each side instead of the original ~1mm. This is a
- *  reasoned first pass, not a fresh hardware measurement — if a real
- *  receipt still clips after this change, re-run the same ruler-line
- *  test used for paperWidthChars (print an unbroken horizontal black bar
- *  through this same raster path and see where it actually cuts off) and
- *  adjust this value to match. */
+ *  width of an "80mm" roll — see RASTER_CONTENT_WIDTH_MM below for why
+ *  the exact value has to travel with this constant rather than being a
+ *  bare number here. */
+export const RASTER_CONTENT_WIDTH_MM = 68
+
+/** The 78mm→68mm correction below (~87.5%, the same 42/48 ratio the
+ *  ESC/POS TEXT path already established for this hardware — see
+ *  printReceipt.ts's paperWidthChars comment) was applied once already
+ *  (78mm nominal → 68mm CSS body width) and made *no visible difference*
+ *  on a real print. Root cause of that non-fix: this CSS-only change
+ *  narrows where the *content* sits inside the page, but printReceipt.ts's
+ *  captureReceiptImage() was still asked to capture a window sized to the
+ *  full nominal paper width (options.paperWidthMm, 80mm) — so the
+ *  captured *raster image* handed to the printer stayed exactly as wide
+ *  as before, just with the real content re-centered inside unused
+ *  margin. Since the printer drops whatever falls past its physical
+ *  print-head width by total image width, not by where the visible
+ *  content happens to sit within that image, the same rightmost dots
+ *  (this time genuinely blank margin as often as digits) got cut and the
+ *  print looked identical. The two widths — this constant, and the
+ *  capture window width in printReceipt.ts — must always be the same
+ *  number for the correction to reach the actual bytes sent to the
+ *  printer; RASTER_CONTENT_WIDTH_MM is exported so printReceipt.ts reads
+ *  it instead of recomputing or hardcoding a second copy that can drift
+ *  out of sync with this one the way the 68mm-only CSS fix just did.
+ *  Still a reasoned first pass, not a fresh hardware measurement — if a
+ *  real receipt still clips after this change, re-run the same
+ *  ruler-line test used for paperWidthChars (print an unbroken
+ *  horizontal black bar through this same raster path and see where it
+ *  actually cuts off) and adjust this constant to match. */
 function receiptStyle(paperSize: ReceiptPaperSize): string {
   if (paperSize === '80mm') {
     return `
-  body { font-family: 'Noto Sans Sinhala', 'Segoe UI', sans-serif; width: 68mm; margin: 0 auto; padding: 4mm; font-size: 11px; color: #000; }
+  body { font-family: 'Noto Sans Sinhala', 'Segoe UI', sans-serif; width: ${RASTER_CONTENT_WIDTH_MM}mm; margin: 0 auto; padding: 4mm; font-size: 11px; color: #000; }
   h1 { font-size: 14px; text-align: center; margin: 0 0 2mm; }
   .business-name { font-size: 13px; }
   .muted { color: #555; font-size: 10px; }
