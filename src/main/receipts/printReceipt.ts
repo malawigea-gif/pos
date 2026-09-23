@@ -3,7 +3,7 @@ import type { NativeImage } from 'electron'
 import { ThermalPrinter, PrinterTypes } from 'node-thermal-printer'
 import { PNG } from 'pngjs'
 import { buildReceiptTextBuffer } from './receiptBuffer'
-import { buildReceiptHtml, RASTER_CONTENT_WIDTH_MM } from './receiptHtml'
+import { buildReceiptHtml, getRasterContentWidthMm } from './receiptHtml'
 import { printRawBufferOnWindows, resolveWindowsPrinterName } from './windowsRawPrinter'
 import type { ReceiptData } from '../../shared/sales'
 
@@ -112,7 +112,11 @@ async function captureReceiptImage(data: ReceiptData, widthMm: number): Promise<
   const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1
   const width = Math.round(targetPxWidth / scaleFactor)
   const win = getCaptureWindow(width)
-  const html = buildReceiptHtml(data, '80mm', RASTER_ZOOM / scaleFactor)
+  // widthMm is passed through as the HTML's own content width too — the
+  // capture window and the CSS content it renders must always agree on the
+  // same number, or the mismatch that originally caused the totals-clipping
+  // bug (RASTER_CONTENT_WIDTH_MM_80's comment in receiptHtml.ts) recurs.
+  const html = buildReceiptHtml(data, '80mm', RASTER_ZOOM / scaleFactor, widthMm)
   await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
   // The embedded Sinhala webfont (@font-face, base64) hasn't necessarily
   // finished loading/shaping by the time loadURL's promise resolves —
@@ -283,20 +287,21 @@ export async function printReceiptThermal(data: ReceiptData, options: PrintRecei
     // Sinhala glyphs don't exist in any ESC/POS built-in code page, so the
     // receipt is rendered to a bitmap and printed as an image instead of
     // text — banded into multiple raster commands, see printBandedImage.
-    // Capture at RASTER_CONTENT_WIDTH_MM (the exact width buildReceiptHtml's
-    // '80mm' template renders at), NOT options.paperWidthMm (the nominal
-    // paper size). An earlier fix narrowed only the CSS body width and left
-    // this at the nominal 80mm, so the captured raster image stayed exactly
-    // as wide as before with the content merely re-centered inside it —
-    // the printer, which clips by total image width regardless of where
-    // the visible content sits, cut the same dots and the print looked
-    // unchanged. See RASTER_CONTENT_WIDTH_MM's own comment in receiptHtml.ts
-    // for the full story. (58mm paper still renders this same '80mm'-style
-    // template — buildReceiptHtml has no narrower template for it yet — so
-    // it also gets RASTER_CONTENT_WIDTH_MM here rather than a mismatched
-    // window size; giving 58mm hardware its own correctly-sized raster
-    // template is a separate follow-up, not yet done.)
-    const image = await captureReceiptImage(data, RASTER_CONTENT_WIDTH_MM)
+    // Capture at getRasterContentWidthMm(options.paperWidthMm) — the exact
+    // width buildReceiptHtml is also told to render its '80mm'-style
+    // template at (see captureReceiptImage above) — NOT options.paperWidthMm
+    // itself (the nominal paper size). An earlier fix narrowed only the CSS
+    // body width and left the capture window at the nominal 80mm, so the
+    // captured raster image stayed exactly as wide as before with the
+    // content merely re-centered inside it — the printer, which clips by
+    // total image width regardless of where the visible content sits, cut
+    // the same dots and the print looked unchanged. See
+    // RASTER_CONTENT_WIDTH_MM_80's own comment in receiptHtml.ts for the
+    // full story. 58mm paper now gets its own RASTER_CONTENT_WIDTH_MM_58
+    // (a reasoned, not yet hardware-measured, estimate — see its comment)
+    // instead of reusing the 80mm figure.
+    const rasterContentWidthMm = getRasterContentWidthMm(options.paperWidthMm ?? 80)
+    const image = await captureReceiptImage(data, rasterContentWidthMm)
     await printBandedImage(printer, image)
   } else {
     const textBuffer = buildReceiptTextBuffer(data, { interfaceName: options.interfaceName, paperWidthChars })

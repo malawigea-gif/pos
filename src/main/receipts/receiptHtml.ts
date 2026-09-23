@@ -36,10 +36,37 @@ function formatDateOnly(iso: string, language: 'en' | 'si'): string {
  *  rather than just stretching the thermal layout across a full page.
  *
  *  Content width is deliberately narrower than the nominal 78mm usable
- *  width of an "80mm" roll — see RASTER_CONTENT_WIDTH_MM below for why
+ *  width of an "80mm" roll — see RASTER_CONTENT_WIDTH_MM_80 below for why
  *  the exact value has to travel with this constant rather than being a
  *  bare number here. */
-export const RASTER_CONTENT_WIDTH_MM = 68
+export const RASTER_CONTENT_WIDTH_MM_80 = 68
+
+/** 58mm thermal paper's commonly-cited printable width is 48mm (384 dots
+ *  at 203dpi — this is the figure printer vendors themselves publish for
+ *  58mm-roll hardware, the 58mm equivalent of the "78mm nominal" figure
+ *  the 80mm constant above started from). No real 58mm roll has been
+ *  through the ruler-line calibration test yet (see RASTER_CONTENT_WIDTH_
+ *  MM_80's comment for what that test is) — this printer has only ever
+ *  been tested with 80mm paper loaded. Absent a real measurement, this
+ *  applies the same ~87.2% safety ratio the ruler test found necessary
+ *  for 80mm paper on this hardware (68mm measured-safe / 78mm nominal) to
+ *  58mm's nominal 48mm, giving 48 * 0.872 ≈ 42mm. This is a reasoned
+ *  estimate carried over from a different paper width, not a
+ *  measurement — the same status paperWidthChars=32 already has for the
+ *  text path (see printReceiptThermal's comment). Re-run the ruler test
+ *  on real 58mm paper before trusting this number the way 68mm is now
+ *  trusted. */
+export const RASTER_CONTENT_WIDTH_MM_58 = 42
+
+/** Single source of truth for which raster content width applies to which
+ *  physical paper width — both the CSS body width (below) and the raster
+ *  capture window in printReceipt.ts must read this instead of each
+ *  picking their own constant, or they can drift apart exactly the way
+ *  the original clipping bug happened (see RASTER_CONTENT_WIDTH_MM_80's
+ *  comment). */
+export function getRasterContentWidthMm(paperWidthMm: 58 | 80): number {
+  return paperWidthMm === 58 ? RASTER_CONTENT_WIDTH_MM_58 : RASTER_CONTENT_WIDTH_MM_80
+}
 
 /** The 78mm→68mm correction below (~87.5%, the same 42/48 ratio the
  *  ESC/POS TEXT path already established for this hardware — see
@@ -55,21 +82,23 @@ export const RASTER_CONTENT_WIDTH_MM = 68
  *  print-head width by total image width, not by where the visible
  *  content happens to sit within that image, the same rightmost dots
  *  (this time genuinely blank margin as often as digits) got cut and the
- *  print looked identical. The two widths — this constant, and the
- *  capture window width in printReceipt.ts — must always be the same
+ *  print looked identical. The two widths — the raster content width, and
+ *  the capture window width in printReceipt.ts — must always be the same
  *  number for the correction to reach the actual bytes sent to the
- *  printer; RASTER_CONTENT_WIDTH_MM is exported so printReceipt.ts reads
- *  it instead of recomputing or hardcoding a second copy that can drift
- *  out of sync with this one the way the 68mm-only CSS fix just did.
- *  Still a reasoned first pass, not a fresh hardware measurement — if a
- *  real receipt still clips after this change, re-run the same
- *  ruler-line test used for paperWidthChars (print an unbroken
- *  horizontal black bar through this same raster path and see where it
- *  actually cuts off) and adjust this constant to match. */
-function receiptStyle(paperSize: ReceiptPaperSize): string {
+ *  printer; `contentWidthMm` below is threaded through from
+ *  getRasterContentWidthMm() so printReceipt.ts and this file always read
+ *  the same value for whichever paper size is actually loaded, instead of
+ *  each hardcoding its own copy that can drift out of sync the way the
+ *  68mm-only CSS fix once did. Still a reasoned first pass for either
+ *  paper width, not a fresh hardware measurement — if a real receipt
+ *  still clips after this change, re-run the same ruler-line test used
+ *  for paperWidthChars (print an unbroken horizontal black bar through
+ *  this same raster path and see where it actually cuts off) and adjust
+ *  RASTER_CONTENT_WIDTH_MM_80 / RASTER_CONTENT_WIDTH_MM_58 to match. */
+function receiptStyle(paperSize: ReceiptPaperSize, contentWidthMm: number): string {
   if (paperSize === '80mm') {
     return `
-  body { font-family: 'Noto Sans Sinhala', 'Segoe UI', sans-serif; width: ${RASTER_CONTENT_WIDTH_MM}mm; margin: 0 auto; padding: 4mm; font-size: 11px; color: #000; }
+  body { font-family: 'Noto Sans Sinhala', 'Segoe UI', sans-serif; width: ${contentWidthMm}mm; margin: 0 auto; padding: 4mm; font-size: 11px; color: #000; }
   h1 { font-size: 14px; text-align: center; margin: 0 0 2mm; }
   .business-name { font-size: 13px; }
   .muted { color: #555; font-size: 10px; }
@@ -85,8 +114,20 @@ function receiptStyle(paperSize: ReceiptPaperSize): string {
 
 /** Builds a self-contained receipt HTML document (no external requests —
  *  the Sinhala font is embedded as base64 — so it renders identically
- *  offline in a hidden window regardless of dev vs. packaged build). */
-export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize, rasterZoom?: number): string {
+ *  offline in a hidden window regardless of dev vs. packaged build).
+ *
+ *  `contentWidthMm` only affects the '80mm' raster-style layout, and only
+ *  matters to callers that also control the raster capture window width
+ *  (i.e. printReceipt.ts) — see getRasterContentWidthMm above. It defaults
+ *  to RASTER_CONTENT_WIDTH_MM_80 so PDF export (receiptPdf.ts), which has
+ *  no capture window to keep in sync, keeps its existing fixed-width
+ *  behavior unchanged. */
+export function buildReceiptHtml(
+  data: ReceiptData,
+  paperSize: ReceiptPaperSize,
+  rasterZoom?: number,
+  contentWidthMm: number = RASTER_CONTENT_WIDTH_MM_80
+): string {
   const t = RECEIPT_LABELS[data.language]
   const money = (n: number): string => formatMoney(n, data.language)
   const docLabel = data.documentType === 'quotation' ? t.quotationNo : t.invoiceNo
@@ -133,7 +174,7 @@ export function buildReceiptHtml(data: ReceiptData, paperSize: ReceiptPaperSize,
     font-style: normal;
   }
   * { box-sizing: border-box; }
-  ${receiptStyle(paperSize)}
+  ${receiptStyle(paperSize, contentWidthMm)}
   ${rasterZoom ? `body { zoom: ${rasterZoom}; }` : ''}
   .center { text-align: center; }
   table { width: 100%; border-collapse: collapse; margin: 2mm 0; }
